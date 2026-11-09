@@ -1,0 +1,23 @@
+{
+  "name": "poker-entre-amigos",
+  "version": "1.0.0",
+  "description": "Texas Hold'em No Limit multijugador en tiempo real con fichas virtuales gratuitas",
+  "main": "server/index.js",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning server/index.js",
+    "test": "node --no-warnings=ExperimentalWarning --test test/*.test.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.22.3",
+    "nodemailer": "^6.10.1",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
+  }
+}

@@ -315,6 +315,33 @@ test('acción fuera de turno y retiro forzado', () => {
   assert.equal(h.player(1).stack, 110);
 });
 
+test('sin ciegas: nadie pone nada, habla el de la izquierda del botón y la apuesta mínima es 1', () => {
+  const players = [0, 1, 2].map((s) => ({ seat: s, userId: s, stack: 100 }));
+  const h = new Hand({ players, dealerSeat: 0, smallBlind: 0, bigBlind: 0 });
+  assert.equal(h.sbSeat, null);
+  assert.equal(h.bbSeat, null);
+  assert.ok(h.players.every((p) => p.bet === 0 && p.stack === 100));
+  assert.ok(h.players.every((p) => p.hole.length === 2));
+  assert.equal(h.turnSeat, 1);
+  const L = h.legalActions(1);
+  assert.ok(L.canCheck && L.canBet && !L.canCall);
+  assert.equal(L.minTo, 1);
+  h.act(1, { type: 'check' });
+  h.act(2, { type: 'check' });
+  h.act(0, { type: 'check' });
+  assert.equal(h.street, 'flop', 'si todos pasan se ve el flop');
+  assert.equal(h.turnSeat, 1);
+  h.act(1, { type: 'bet', amount: 5 });
+  assert.equal(h.legalActions(2).minTo, 10);
+  // mano a mano sin ciegas: el botón habla último
+  const hu = new Hand({ players: players.slice(0, 2), dealerSeat: 0, smallBlind: 0, bigBlind: 0 });
+  assert.equal(hu.turnSeat, 1);
+  hu.act(1, { type: 'check' });
+  assert.equal(hu.turnSeat, 0);
+  hu.act(0, { type: 'check' });
+  assert.equal(hu.street, 'flop');
+});
+
 // ---------------------------------------------------------------- Conservación (fuzz)
 test('conservación de fichas en 3000 manos aleatorias', () => {
   const rnd = (n) => Math.floor(Math.random() * n);
@@ -323,7 +350,8 @@ test('conservación de fichas en 3000 manos aleatorias', () => {
     const seats = shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8]).slice(0, n);
     const players = seats.map((s) => ({ seat: s, userId: s, stack: 1 + rnd(rnd(2) ? 60 : 2000) }));
     const start = players.reduce((s, p) => s + p.stack, 0);
-    const h = new Hand({ players, dealerSeat: seats[rnd(n)], smallBlind: 5, bigBlind: 10 });
+    const noBlinds = rnd(4) === 0;
+    const h = new Hand({ players, dealerSeat: seats[rnd(n)], smallBlind: noBlinds ? 0 : 5, bigBlind: noBlinds ? 0 : 10 });
     let guard = 0;
     while (!h.finished) {
       if (++guard > 500) throw new Error('mano infinita');

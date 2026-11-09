@@ -8,6 +8,7 @@ const { createAuth, UserError } = require('./auth');
 const { createHistory } = require('./history');
 const { TableManager } = require('./tables');
 const { startBackups } = require('./persist');
+const { OPTIONS: AVATAR_OPTIONS, sanitizeAvatar, parseAvatar } = require('./avatar');
 
 const COOKIE = 'pk_sid';
 
@@ -125,7 +126,17 @@ function createApp(overrides = {}) {
   }));
   app.post('/api/auth/recovery-code', authLimiter, requireUser, wrap((req) => ({ recoveryCode: auth.regenerateRecovery(req.user.id, (req.body || {}).password) })));
   app.get('/healthz', (req, res) => res.json({ ok: true }));
-  app.get('/api/me', (req, res) => res.json({ user: req.user || null }));
+  app.get('/api/me', (req, res) => {
+    if (!req.user) return res.json({ user: null });
+    const row = db.prepare('SELECT avatar FROM users WHERE id = ?').get(req.user.id);
+    res.json({ user: { ...req.user, avatar: parseAvatar(row && row.avatar, req.user.id), avatarSet: !!(row && row.avatar) }, avatarOptions: AVATAR_OPTIONS });
+  });
+  app.post('/api/avatar', requireUser, wrap((req) => {
+    const avatar = sanitizeAvatar(req.body || {}, req.user.id);
+    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(JSON.stringify(avatar), req.user.id);
+    tables.avatarChanged(req.user.id);
+    return { avatar };
+  }));
 
   // Mesas
   let tables; // se crea después de io
@@ -195,6 +206,7 @@ function createApp(overrides = {}) {
     socket.on('table:rebuy', handler((p) => { needRoom().rebuy(user, p); }));
     socket.on('table:leave', handler(() => { needRoom().leave(user); }));
     socket.on('table:close', handler(() => { needRoom().close(user); }));
+    socket.on('table:accounts', handler(() => ({ accounts: needRoom().accounts() })));
     socket.on('table:show', handler(() => { needRoom().showCards(user); }));
     socket.on('table:chat', handler((p) => ({ message: needRoom().sendChat(user, p) })));
     socket.on('table:exit', handler(() => { if (room) { room.detachSocket(socket, user.id); room = null; } }));

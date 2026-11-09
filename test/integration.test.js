@@ -427,3 +427,93 @@ test('no se puede entrar sin cuenta (sin modo invitado)', async () => {
   assert.equal(me.status, 401, 'sin sesión no se ve nada');
   await inst.close();
 });
+
+test('liquidación: quién le paga a quién', () => {
+  const { settle } = require('../server/history');
+  const P = (username, balance) => ({ username, code: username, balance });
+  // André cargó 30 y quedó con 100 (+70); Beto -50; Caro -20
+  const pay = settle([P('André', 70), P('Beto', -50), P('Caro', -20)]);
+  assert.deepEqual(pay.map((x) => [x.from, x.to, x.amount]), [['Beto', 'André', 50], ['Caro', 'André', 20]]);
+  const pay2 = settle([P('A', 60), P('B', 40), P('C', -70), P('D', -30)]);
+  const total = (who, key) => pay2.filter((x) => x[key] === who).reduce((a, x) => a + x.amount, 0);
+  assert.equal(total('A', 'to'), 60);
+  assert.equal(total('B', 'to'), 40);
+  assert.equal(total('C', 'from'), 70);
+  assert.equal(total('D', 'from'), 30);
+  assert.deepEqual(settle([P('A', 0), P('B', 0)]), []);
+});
+
+test('mesa sin ciegas, personaje y cuentas en vivo', async (t) => {
+  const inst = createApp({ dbFile: ':memory:', resultDelayMs: 60000, graceMs: 60000, sweepMs: 1000 });
+  const base = `http://127.0.0.1:${await inst.listen(0)}`;
+  const a = client(base); const b = client(base);
+  await a.post('/api/auth/register', { username: 'andre', password: '12345678' });
+  await b.post('/api/auth/register', { username: 'beto', password: '12345678' });
+
+  // personaje: solo valores de la lista
+  let r = await a.get('/api/me');
+  assert.ok(r.data.avatarOptions.hat.includes('vaquero'));
+  assert.equal(r.data.user.avatarSet, false);
+  r = await a.post('/api/avatar', { skin: r.data.avatarOptions.skin[4], hat: 'vaquero', glasses: 'sol', beard: 'bigote', hair: 'rulos', hairColor: '<script>' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.avatar.hat, 'vaquero');
+  assert.notEqual(r.data.avatar.hairColor, '<script>', 'valores inventados se descartan');
+  r = await a.get('/api/me');
+  assert.equal(r.data.user.avatarSet, true);
+
+  // mesa sin ciegas
+  r = await a.post('/api/tables', { name: 'Sin ciegas', maxPlayers: 4, startingStack: 30, useBlinds: false, turnSeconds: 30, allowRebuy: true, maxBuyin: 200 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.table.useBlinds, false);
+  assert.equal(r.data.table.bigBlind, 0);
+  const code = r.data.table.code;
+  const sa = a.socket(); const sb = b.socket();
+  t.after(async () => { sa.close(); sb.close(); await inst.close(); });
+  await Promise.all([sa.ready, sb.ready]);
+  await sa.call('table:join', { code }); await sb.call('table:join', { code });
+  assert.ok((await sa.call('table:sit', { amount: 30, requestId: 'andre-sit-1' })).ok);
+  assert.ok((await sb.call('table:sit', { amount: 30, requestId: 'beto-sit-01' })).ok);
+  await until(() => sb.state && sb.state.seats.filter(Boolean).length === 2, 2000, 'dos sentados');
+  assert.equal(sb.state.seats[sa.state.mySeat].avatar.hat, 'vaquero', 'los demás ven el personaje');
+  // recargas antes de empezar: 20, 50, 10
+  for (const [amt, id] of [[20, 'r-0000001'], [50, 'r-0000002'], [10, 'r-0000003']]) {
+    assert.ok((await sa.call('table:rebuy', { amount: amt, requestId: id })).ok);
+  }
+  await sa.call('table:ready', { ready: true }); await sb.call('table:ready', { ready: true });
+  assert.ok((await sa.call('table:start')).ok);
+  await until(() => sa.state.hand, 2000, 'mano');
+  assert.equal(sa.state.hand.sbSeat, null);
+  assert.equal(sa.state.hand.totalPot, 0, 'nadie pone ciegas');
+  const first = sa.state.hand.turnSeat === sa.state.mySeat ? sa : sb;
+  await until(() => first.state.hand && first.state.hand.legal, 2000, 'estado del primero');
+  assert.equal(first.state.hand.legal.minTo, 1);
+  // B se retira enseguida si le toca; si no, A apuesta y B se retira
+  if (first === sa) {
+    await sa.call('table:action', { type: 'bet', amount: 5, turnId: sa.state.hand.turnId, actionId: rid() });
+    await until(() => sb.state.hand && sb.state.hand.turnSeat === sb.state.mySeat, 2000, 'turno B');
+  }
+  await until(() => sb.state.hand && sb.state.hand.turnSeat === sb.state.mySeat && sb.state.hand.legal, 2000, 'turno de B sincronizado');
+  const f = await sb.call('table:action', { type: 'fold', turnId: sb.state.hand.turnId, actionId: rid() });
+  assert.ok(f.ok, f.error);
+  await until(() => sa.state.lastResult, 2000, 'resultado');
+
+  // cuentas en vivo, visibles para todos los de la mesa
+  const acc = (await sb.call('table:accounts')).accounts;
+  const pa = acc.players.find((p) => p.username === 'andre');
+  const pb = acc.players.find((p) => p.username === 'beto');
+  assert.equal(pa.initial, 30);
+  assert.deepEqual(pa.reloads.map((x) => x.amount), [20, 50, 10]);
+  assert.equal(pa.reloadCount, 3);
+  assert.equal(pa.totalLoaded, 110);
+  assert.equal(pa.balance + pb.balance, 0);
+  if (pb.balance < 0) assert.deepEqual(acc.payments.map((x) => [x.from, x.to, x.amount]), [['beto', 'andre', -pb.balance]]);
+
+  // al cerrar la mesa todos reciben las cuentas finales
+  const closed = new Promise((res) => sb.once('table:closed', res));
+  assert.ok((await sa.call('table:close')).ok);
+  const msg = await closed;
+  assert.equal(msg.accounts.players.length, 2);
+  r = await b.get(`/api/history/${acc.sessionId}`);
+  assert.ok(Array.isArray(r.data.session.payments));
+  assert.equal(r.data.session.players.find((p) => p.username === 'andre').reloadCount, 3);
+});

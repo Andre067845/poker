@@ -3,6 +3,8 @@ const crypto = require('node:crypto');
 const { now } = require('./db');
 const { randomCode, UserError } = require('./auth');
 const { Hand, GameError } = require('./engine/holdem');
+const { parseAvatar } = require('./avatar');
+const { sessionAccounts } = require('./history');
 
 const LIMITS = {
   minPlayers: 2, maxPlayers: 9,
@@ -11,7 +13,7 @@ const LIMITS = {
 };
 
 function minBuyinFor(t) {
-  return Math.min(t.starting_stack, t.big_blind * 10);
+  return Math.max(1, Math.min(t.starting_stack, (t.big_blind || 1) * 10));
 }
 
 function validateTableSettings(input) {
@@ -22,20 +24,25 @@ function validateTableSettings(input) {
     return v;
   };
   if (name.length < 1 || name.length > 40) throw new UserError('El nombre de la mesa debe tener entre 1 y 40 caracteres');
+  const useBlinds = input.useBlinds !== false;
   const s = {
     name,
     max_players: num('maxPlayers'),
     starting_stack: num('startingStack'),
-    small_blind: num('smallBlind'),
-    big_blind: num('bigBlind'),
+    small_blind: useBlinds ? num('smallBlind') : 0,
+    big_blind: useBlinds ? num('bigBlind') : 0,
     turn_seconds: num('turnSeconds'),
     allow_rebuy: input.allowRebuy ? 1 : 0,
     max_buyin: num('maxBuyin'),
   };
   if (s.max_players < LIMITS.minPlayers || s.max_players > LIMITS.maxPlayers) throw new UserError('La cantidad de jugadores debe estar entre 2 y 9');
-  if (s.small_blind < 1) throw new UserError('La small blind debe ser al menos 1');
-  if (s.big_blind < s.small_blind) throw new UserError('La big blind no puede ser menor que la small blind (lo habitual es el doble)');
-  if (s.starting_stack < s.big_blind * 10) throw new UserError(`La entrada inicial debe ser al menos 10 big blinds (Bs ${s.big_blind * 10})`);
+  if (useBlinds) {
+    if (s.small_blind < 1) throw new UserError('La small blind debe ser al menos 1');
+    if (s.big_blind < s.small_blind) throw new UserError('La big blind no puede ser menor que la small blind (lo habitual es el doble)');
+    if (s.starting_stack < s.big_blind * 10) throw new UserError(`La entrada inicial debe ser al menos 10 big blinds (Bs ${s.big_blind * 10})`);
+  } else if (s.starting_stack < 10) {
+    throw new UserError('La entrada inicial debe ser al menos Bs 10');
+  }
   if (s.max_buyin < s.starting_stack) throw new UserError('El importe máximo de entrada no puede ser menor que la entrada inicial');
   if (s.max_buyin > LIMITS.maxChips) throw new UserError(`El importe máximo no puede superar Bs ${LIMITS.maxChips.toLocaleString('es')}`);
   if (s.turn_seconds < LIMITS.minTurn || s.turn_seconds > LIMITS.maxTurn) throw new UserError('El tiempo por turno debe estar entre 10 y 300 segundos');
@@ -45,7 +52,7 @@ function validateTableSettings(input) {
 function publicTable(t) {
   return {
     id: t.id, code: t.code, name: t.name, ownerId: t.owner_id, status: t.status,
-    maxPlayers: t.max_players, startingStack: t.starting_stack, smallBlind: t.small_blind,
+    maxPlayers: t.max_players, startingStack: t.starting_stack, smallBlind: t.small_blind, useBlinds: t.big_blind > 0,
     bigBlind: t.big_blind, turnSeconds: t.turn_seconds, allowRebuy: !!t.allow_rebuy,
     maxBuyin: t.max_buyin, minBuyin: minBuyinFor(t), createdAt: t.created_at,
   };
@@ -323,11 +330,13 @@ class Room {
         }
       }
     });
+    const finalAccounts = this.session ? sessionAccounts(this.db, this.session.id) : null;
     this.t.status = 'closed';
     this.seats.fill(null);
     this._endSession();
+    if (finalAccounts) finalAccounts.endedAt = new Date().toISOString();
     clearTimeout(this.turnTimer);
-    this.io.to(this.roomName).emit('table:closed', { message: 'El creador cerró la mesa.' });
+    this.io.to(this.roomName).emit('table:closed', { message: 'El creador cerró la mesa.', accounts: finalAccounts });
     this.broadcast();
   }
 
@@ -506,6 +515,12 @@ class Room {
     return m;
   }
 
+  /** Cuentas de la sesión: cargas, saldos y quién le paga a quién. */
+  accounts() {
+    if (!this.session) return null;
+    return sessionAccounts(this.db, this.session.id);
+  }
+
   emitEvent(ev) { this.io.to(this.roomName).emit('table:event', ev); }
 
   broadcast() {
@@ -531,7 +546,7 @@ class Room {
       else if (revealed.has(i)) cards = revealed.get(i);
       else if (!h && this.lastResult && s.userId === userId && this.lastHoles && this.lastHoles.has(userId)) cards = this.lastHoles.get(userId);
       return {
-        seat: i, userId: s.userId, username: s.username, code: s.code,
+        seat: i, userId: s.userId, username: s.username, code: s.code, avatar: this.mgr.avatarOf(s.userId),
         stack: hp ? hp.stack : s.stack,
         connected: this.isConnected(s.userId),
         ready: s.ready,
@@ -559,6 +574,7 @@ class Room {
         totalPot: h.players.reduce((s, p) => s + p.total, 0),
         currentBet: h.currentBet,
         dealerSeat: h.dealerSeat, sbSeat: h.sbSeat, bbSeat: h.bbSeat,
+        dealOrder: h._positionOrder(),
         turnSeat: h.turnSeat,
         turnId: this.turnId,
         deadline: this.turnDeadline,
@@ -587,7 +603,7 @@ class Room {
     return {
       ...publicTable(this.t),
       ownerName: this.mgr.usernameOf(this.t.owner_id),
-      players: this.seats.filter(Boolean).map((s) => ({ username: s.username, code: s.code, stack: s.stack })),
+      players: this.seats.filter(Boolean).map((s) => ({ username: s.username, code: s.code, stack: s.stack, avatar: this.mgr.avatarOf(s.userId) })),
       freeSeats: this.seats.filter((s) => !s).length,
       gameStarted: !!(this.session && this.session.game_started),
       handInProgress: !!(this.hand && !this.hand.finished),
@@ -610,6 +626,21 @@ class TableManager {
     this.config = config;
     this.rooms = new Map();
     this._names = new Map();
+  }
+
+  avatarOf(id) {
+    if (!this._avatars) this._avatars = new Map();
+    if (!this._avatars.has(id)) {
+      const u = this.db.prepare('SELECT avatar FROM users WHERE id = ?').get(id);
+      this._avatars.set(id, parseAvatar(u && u.avatar, id));
+    }
+    return this._avatars.get(id);
+  }
+
+  /** Tras cambiar el personaje, se actualiza en las mesas donde está el usuario. */
+  avatarChanged(id) {
+    if (this._avatars) this._avatars.delete(id);
+    for (const r of this.rooms.values()) if (r.seatOf(id) >= 0 || r.sockets.has(id)) r.broadcast();
   }
 
   usernameOf(id) {

@@ -19,10 +19,11 @@ class Hand {
    * @param {{seat:number,userId:any,stack:number}[]} o.players jugadores con fichas (>=2)
    * @param {number} o.dealerSeat asiento del botón (debe estar entre los jugadores)
    * @param {number} o.smallBlind
-   * @param {number} o.bigBlind
+   * @param {number} o.bigBlind  0 para jugar sin ciegas
+   * @param {number} [o.minBet]  apuesta mínima cuando no hay ciegas (por defecto 1)
    * @param {string[]} [o.deck] mazo ya barajado (para pruebas). Si falta se baraja con crypto.
    */
-  constructor({ players, dealerSeat, smallBlind, bigBlind, deck }) {
+  constructor({ players, dealerSeat, smallBlind, bigBlind, minBet, deck }) {
     const ps = players.filter((p) => p.stack > 0).sort((a, b) => a.seat - b.seat);
     if (ps.length < 2) throw new GameError('Se necesitan al menos dos jugadores con fichas');
     if (new Set(ps.map((p) => p.seat)).size !== ps.length) throw new Error('Asientos duplicados');
@@ -31,15 +32,18 @@ class Hand {
       bet: 0, total: 0, folded: false, allIn: false, acted: false, actedAtBet: null,
       hole: [], lastAction: null,
     }));
-    this.sb = smallBlind;
-    this.bb = bigBlind;
+    this.blinds = bigBlind > 0;
+    this.sb = this.blinds ? smallBlind : 0;
+    this.bb = this.blinds ? bigBlind : 0;
+    // Apuesta mínima: la big blind, o 1 (o la indicada) si se juega sin ciegas.
+    this.minBet = this.blinds ? bigBlind : Math.max(1, minBet || 1);
     this.deck = deck ? deck.slice() : shuffledDeck();
     if (new Set(this.deck).size !== this.deck.length) throw new Error('Mazo con cartas repetidas');
     this.burned = [];
     this.board = [];
     this.street = 'preflop';
     this.currentBet = 0;
-    this.minRaise = bigBlind;
+    this.minRaise = this.minBet;
     this.turnIdx = -1;
     this.finished = false;
     this.result = null;
@@ -61,8 +65,8 @@ class Hand {
   }
 
   get dealerSeat() { return this.players[this.dealerIdx].seat; }
-  get sbSeat() { return this.players[this.sbIdx].seat; }
-  get bbSeat() { return this.players[this.bbIdx].seat; }
+  get sbSeat() { return this.blinds ? this.players[this.sbIdx].seat : null; }
+  get bbSeat() { return this.blinds ? this.players[this.bbIdx].seat : null; }
   get turnSeat() { return this.finished || this.turnIdx < 0 ? null : this.players[this.turnIdx].seat; }
 
   player(seat) { return this.players.find((p) => p.seat === seat); }
@@ -82,6 +86,15 @@ class Hand {
 
   _start() {
     const n = this.players.length;
+    if (!this.blinds) {
+      // Sin ciegas: nadie pone nada al empezar y habla primero el de la izquierda del botón.
+      this.currentBet = 0;
+      this.minRaise = this.minBet;
+      this._deal();
+      this.turnIdx = this._nextNeeding(this.dealerIdx);
+      if (this.turnIdx < 0) this._endStreet();
+      return;
+    }
     const sbP = this.players[this.sbIdx];
     const bbP = this.players[this.bbIdx];
     const sbAmt = this._put(sbP, this.sb);
@@ -94,12 +107,17 @@ class Hand {
     this.currentBet = this.bb;
     this.minRaise = this.bb;
 
-    // Reparto: una carta por vez, empezando a la izquierda del botón.
+    this._deal();
+    this.turnIdx = this._nextNeeding(this.bbIdx);
+    if (this.turnIdx < 0) this._endStreet();
+  }
+
+  /** Reparto: una carta por vez, empezando a la izquierda del botón. */
+  _deal() {
+    const n = this.players.length;
     for (let round = 0; round < 2; round++) {
       for (let k = 1; k <= n; k++) this.players[(this.dealerIdx + k) % n].hole.push(this._draw());
     }
-    this.turnIdx = this._nextNeeding(this.bbIdx);
-    if (this.turnIdx < 0) this._endStreet();
   }
 
   _live() { return this.players.filter((p) => !p.folded); }
@@ -137,7 +155,7 @@ class Hand {
     const othersCanAct = this.players.some((o) => o !== p && !o.folded && !o.allIn);
     const reopened = p.actedAtBet === null || this.currentBet - p.actedAtBet >= this.minRaise;
     const canAggress = othersCanAct && reopened && maxTo > this.currentBet;
-    const minTo = Math.min(this.currentBet === 0 ? this.bb : this.currentBet + this.minRaise, maxTo);
+    const minTo = Math.min(this.currentBet === 0 ? this.minBet : this.currentBet + this.minRaise, maxTo);
     return {
       toCall,
       callAmount,
@@ -293,7 +311,7 @@ class Hand {
     }
     this._dealStreet();
     this.currentBet = 0;
-    this.minRaise = this.bb;
+    this.minRaise = this.minBet;
     for (const p of this.players) { p.acted = false; p.actedAtBet = null; if (!p.folded && !p.allIn) p.lastAction = null; }
     this.turnIdx = this._nextNeeding(this.dealerIdx);
     if (this.turnIdx < 0) this._endStreet();

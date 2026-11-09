@@ -123,6 +123,12 @@ Además se probó en Chromium (Playwright) una partida completa entre una sesió
 - El creador inicia la partida; si el creador no está sentado, cualquier jugador sentado puede iniciarla (para que la mesa no quede bloqueada). Su desconexión no detiene el juego.
 - Si el servidor se reinicia a mitad de una mano, esa mano se anula y cada jugador recupera las fichas que tenía al empezarla (queda marcada como "anulada" en el historial).
 
+## Mesa, personajes y cuentas
+
+- **Ciegas opcionales**: al crear la mesa se pregunta si se juega con small blind y big blind; solo si la respuesta es sí se piden los montos. Sin ciegas nadie pone nada al empezar y la apuesta mínima es Bs 1.
+- **Crupier y personajes**: un crupier reparte las cartas (se ven volar hacia cada jugador) y da vuelta el flop, el turn y el river. Cada jugador es un personaje (cara y manos): al apostar mete fichas en la mesa y al pasar golpea la mesa dos veces. Antes de entrar a una mesa (y desde el lobby, en "Mi personaje") se elige color de piel, pelo, sombrero, gafas, barba y camisa.
+- **Cuentas**: el botón 💰 de la mesa muestra para todos con cuánto entró cada uno, cada carga en orden ("Entró con 30 → +20 → +50 → +10"), cuántas veces cargó, con cuánto quedó y **quién le paga a quién**. Al cerrar la mesa, todos reciben las cuentas finales, que quedan en el historial de partidas. La app no maneja dinero: solo lleva la cuenta.
+
 ## Celulares: vertical y horizontal
 
 La mesa se adapta al espacio disponible. En celular **vertical** el panel de acciones queda abajo; en **horizontal** la mesa ocupa la izquierda y las acciones una columna a la derecha. Durante tu turno, "Recargar" y "Abandonar" pasan al menú ⋯ para que los botones de juego entren sin desplazar la pantalla. Al girar el teléfono la mesa se redibuja sola.

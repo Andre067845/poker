@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   recovery_hash TEXT,
   is_guest      INTEGER NOT NULL DEFAULT 0,
+  avatar        TEXT,
   code          TEXT NOT NULL UNIQUE,
   created_at    TEXT NOT NULL
 );
@@ -131,6 +132,7 @@ function migrate(db) {
   }
   if (!cols.includes('recovery_hash')) db.exec('ALTER TABLE users ADD COLUMN recovery_hash TEXT');
   if (!cols.includes('is_guest')) db.exec('ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0');
+  if (!cols.includes('avatar')) db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');
 }
 
 const now = () => new Date().toISOString();

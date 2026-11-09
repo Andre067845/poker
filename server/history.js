@@ -1,6 +1,57 @@
 'use strict';
 const { UserError } = require('./auth');
 
+/**
+ * Quién le paga a quién: empareja a los que perdieron con los que ganaron
+ * (el que más debe le paga primero al que más ganó), con la menor cantidad de pagos posible en la práctica.
+ */
+function settle(players) {
+  const winners = players.filter((p) => p.balance > 0).map((p) => ({ name: p.username, code: p.code, left: p.balance }))
+    .sort((a, b) => b.left - a.left);
+  const losers = players.filter((p) => p.balance < 0).map((p) => ({ name: p.username, code: p.code, left: -p.balance }))
+    .sort((a, b) => b.left - a.left);
+  const payments = [];
+  let i = 0; let j = 0;
+  while (i < losers.length && j < winners.length) {
+    const amount = Math.min(losers[i].left, winners[j].left);
+    if (amount > 0) payments.push({ from: losers[i].name, fromCode: losers[i].code, to: winners[j].name, toCode: winners[j].code, amount });
+    losers[i].left -= amount; winners[j].left -= amount;
+    if (losers[i].left === 0) i++;
+    if (winners[j].left === 0) j++;
+  }
+  return payments;
+}
+
+/** Filas de jugadores con cargas y saldo de una sesión (sin chequeo de permisos). */
+function sessionPlayers(db, sessionId, ended) {
+  const players = db.prepare(`SELECT sp.user_id, sp.stack, sp.seated, sp.first_joined_at, u.username, u.code
+    FROM session_players sp JOIN users u ON u.id = sp.user_id WHERE sp.session_id = ? ORDER BY sp.first_joined_at`).all(sessionId);
+  const ledger = db.prepare('SELECT * FROM chip_ledger WHERE session_id = ? ORDER BY id').all(sessionId);
+  return players.map((p) => {
+    const mine = ledger.filter((l) => l.user_id === p.user_id);
+    const initial = mine.find((l) => l.kind === 'buyin');
+    const loads = mine.filter((l) => l.kind === 'rebuy' || l.kind === 'reentry')
+      .map((l) => ({ amount: l.amount, at: l.created_at, kind: l.kind }));
+    const totalLoaded = mine.filter((l) => l.kind !== 'cashout').reduce((a, l) => a + l.amount, 0);
+    const withdrawn = mine.filter((l) => l.kind === 'cashout').reduce((a, l) => a + l.amount, 0);
+    const remaining = p.stack;
+    return {
+      username: p.username, code: p.code, seated: !!p.seated && !ended,
+      initial: initial ? initial.amount : 0, initialAt: initial ? initial.created_at : null,
+      reloads: loads, reloadCount: loads.length, totalLoaded, withdrawn, remaining,
+      finalAmount: withdrawn + remaining,
+      balance: withdrawn + remaining - totalLoaded,
+    };
+  });
+}
+
+function sessionAccounts(db, sessionId) {
+  const s = db.prepare('SELECT * FROM table_sessions WHERE id = ?').get(sessionId);
+  if (!s) return null;
+  const players = sessionPlayers(db, s.id, !!s.ended_at);
+  return { sessionId: s.id, startedAt: s.started_at, endedAt: s.ended_at, players, payments: settle(players) };
+}
+
 function createHistory(db) {
   function listSessions(userId) {
     return db.prepare(`
@@ -19,25 +70,7 @@ function createHistory(db) {
     const isParticipant = s && db.prepare('SELECT 1 FROM session_players WHERE session_id = ? AND user_id = ?').get(s.id, userId);
     if (!s || !isParticipant) throw new UserError('No encontramos esa sesión o no participaste en ella', 404);
 
-    const players = db.prepare(`SELECT sp.user_id, sp.stack, sp.seated, sp.first_joined_at, u.username, u.code
-      FROM session_players sp JOIN users u ON u.id = sp.user_id WHERE sp.session_id = ? ORDER BY sp.first_joined_at`).all(s.id);
-    const ledger = db.prepare('SELECT * FROM chip_ledger WHERE session_id = ? ORDER BY id').all(s.id);
-
-    const rows = players.map((p) => {
-      const mine = ledger.filter((l) => l.user_id === p.user_id);
-      const initial = mine.find((l) => l.kind === 'buyin');
-      const loads = mine.filter((l) => l.kind === 'rebuy' || l.kind === 'reentry')
-        .map((l) => ({ amount: l.amount, at: l.created_at, kind: l.kind }));
-      const totalLoaded = mine.filter((l) => l.kind !== 'cashout').reduce((a, l) => a + l.amount, 0);
-      const withdrawn = mine.filter((l) => l.kind === 'cashout').reduce((a, l) => a + l.amount, 0);
-      const remaining = p.stack;
-      return {
-        username: p.username, code: p.code, seated: !!p.seated && !s.ended_at,
-        initial: initial ? initial.amount : 0, initialAt: initial ? initial.created_at : null,
-        reloads: loads, totalLoaded, withdrawn, remaining,
-        balance: withdrawn + remaining - totalLoaded,
-      };
-    });
+    const rows = sessionPlayers(db, s.id, !!s.ended_at);
 
     const hands = db.prepare('SELECT hand_number, started_at, ended_at, summary FROM hands WHERE session_id = ? ORDER BY hand_number').all(s.id)
       .map((h) => {
@@ -55,11 +88,11 @@ function createHistory(db) {
     return {
       id: s.id, tableName: s.table_name, tableCode: s.table_code,
       startedAt: s.started_at, endedAt: s.ended_at, smallBlind: s.small_blind, bigBlind: s.big_blind,
-      players: rows, hands,
+      players: rows, payments: settle(rows), hands,
     };
   }
 
   return { listSessions, sessionDetail };
 }
 
-module.exports = { createHistory };
+module.exports = { createHistory, sessionAccounts, settle };

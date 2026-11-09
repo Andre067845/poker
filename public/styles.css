@@ -352,3 +352,98 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   #toasts { top: 6px; }
   .toast { padding: .45em .8em; font-size: .85rem; }
 }
+
+/* ======================================================================
+   Personajes, crupier y animaciones
+   ====================================================================== */
+.avatar-svg { display: block; width: 100%; height: auto; }
+.figure { position: relative; width: 50px; margin: 0 auto -6px; z-index: 1; display: grid; justify-items: center; }
+.seat.folded .figure { opacity: .55; }
+.seat.turn .figure .avatar-svg { filter: drop-shadow(0 0 6px rgba(242,193,78,.9)); }
+.hands { display: flex; align-items: center; justify-content: center; gap: 2px; margin-top: -14px; position: relative; }
+.hand { width: 13px; height: 10px; border-radius: 6px 6px 5px 5px; box-shadow: inset 0 -2px 0 rgba(0,0,0,.18), 0 1px 2px rgba(0,0,0,.4); flex: none; }
+.hand-cards { display: flex; gap: 2px; min-height: 4px; }
+.hand-cards .card, .hand-cards .deal-in { --card-w: 25px; }
+.hand-cards .deal-in { display: flex; gap: 2px; opacity: 0; animation: dealIn .25s ease-out forwards; }
+@keyframes dealIn { from { opacity: 0; transform: translateY(-6px) scale(.8); } to { opacity: 1; transform: none; } }
+
+/* golpecito doble en la mesa al pasar */
+.hands.knock .hand { animation: knock .5s ease-in-out 1; }
+.hands.knock .hand:last-child { animation-delay: .05s; }
+@keyframes knock { 0%, 50%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(5px) scaleY(.85); } }
+/* empujar fichas al apostar */
+.hands.push { animation: push .45s ease-out 1; }
+@keyframes push { 0% { transform: translateY(0); } 45% { transform: translateY(6px); } 100% { transform: translateY(0); } }
+
+/* crupier */
+.dealer-fig { position: absolute; transform: translate(-50%, -50%); width: 46px; z-index: 2; display: grid; justify-items: center; pointer-events: none; }
+.dealer-fig .hands { margin-top: -12px; }
+.dealer-fig .hand { width: 12px; height: 9px; }
+.dealer-fig .hands.dealing .hand { animation: dealMove .35s ease-in-out 3; }
+.dealer-fig .hands.dealing .hand:last-child { animation-delay: .17s; }
+@keyframes dealMove { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(5px) translateY(3px); } }
+.dealer-tag { font-size: .6rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.75); background: rgba(0,0,0,.45); border-radius: 6px; padding: 0 .4em; margin-top: 2px; }
+
+/* cartas comunitarias que se dan vuelta */
+.board .card.flip-in { animation: flipIn .45s ease-out both; }
+@keyframes flipIn {
+  0% { transform: translateY(-40px) rotateY(90deg) scale(.7); opacity: 0; filter: brightness(.3); }
+  60% { transform: translateY(0) rotateY(90deg) scale(1); opacity: 1; filter: brightness(.3); }
+  100% { transform: rotateY(0) scale(1); filter: none; }
+}
+
+/* cartas y fichas que vuelan */
+.flyer { position: absolute; transform: translate(-50%, -50%); z-index: 8; pointer-events: none; transition-property: left, top, opacity, transform; transition-timing-function: cubic-bezier(.3,.7,.3,1); }
+.fly-card { width: 18px; height: 25px; border-radius: 3px; background: repeating-linear-gradient(45deg, #8e1f2c 0 4px, #a8303e 4px 8px); border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,.5); }
+.fly-card.go { transform: translate(-50%, -50%) rotate(200deg); }
+.fly-chip { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle, #f2c14e 0 35%, #fff 36% 45%, #c0392b 46%); border: 1px solid rgba(0,0,0,.4); box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+
+/* editor de personaje */
+.av-editor { display: grid; grid-template-columns: 120px 1fr; gap: 1em; align-items: start; }
+.av-preview { background: radial-gradient(circle, #239157, #0f5530); border-radius: 14px; padding: 10px 10px 14px; display: grid; justify-items: center; }
+.av-preview .hands { margin-top: -18px; }
+.av-preview .hand { width: 20px; height: 14px; }
+.mini-back { display: inline-block; width: 16px; height: 22px; border-radius: 3px; background: repeating-linear-gradient(45deg, #8e1f2c 0 4px, #a8303e 4px 8px); border: 1.5px solid #fff; }
+.av-fields { display: grid; gap: .5em; }
+.av-row { display: grid; gap: .25em; }
+.av-label { font-weight: 700; font-size: .85rem; color: var(--muted); }
+.av-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatch { width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); cursor: pointer; }
+.swatch.active { outline: 3px solid var(--accent); outline-offset: 2px; }
+.chip { min-height: 34px; padding: .25em .7em; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font-weight: 600; font-size: .85rem; cursor: pointer; }
+.chip.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.av-status { grid-column: 1 / -1; min-height: 1.2em; }
+.avatar-big { width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle, #239157, #0f5530); border: 2px solid var(--line); padding: 4px; cursor: pointer; flex: none; overflow: hidden; }
+.seg.yesno { max-width: 260px; }
+.seg.yesno button.active { background: var(--accent); color: var(--accent-ink); }
+
+/* cuentas: quién le paga a quién */
+.acc-cards { display: grid; gap: .6em; }
+.acc-card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: .6em .8em; display: grid; gap: .25em; }
+.acc-head { display: flex; gap: .5em; align-items: baseline; flex-wrap: wrap; }
+.pay-list { display: grid; gap: .5em; margin: .5em 0; }
+.pay { display: flex; align-items: center; gap: .5em; flex-wrap: wrap; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: .6em .8em; font-size: 1.02rem; }
+.pay .amt { margin-left: auto; font-weight: 800; color: var(--accent); }
+.loads { font-variant-numeric: tabular-nums; }
+.acc-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.acc-table th, .acc-table td { padding: .45em .4em; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.acc-table td.num, .acc-table th.num { text-align: right; }
+
+@media (max-width: 700px) {
+  .figure { width: 36px; margin-bottom: -5px; }
+  .hands { margin-top: -10px; }
+  .hand { width: 10px; height: 8px; }
+  .hand-cards .card, .hand-cards .deal-in { --card-w: 18px; }
+  .dealer-fig { width: 34px; }
+  .dealer-tag { font-size: .5rem; }
+  .av-editor { grid-template-columns: 1fr; }
+  .av-preview { width: 120px; margin: 0 auto; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .figure { width: 30px; margin-bottom: -5px; }
+  .hands { margin-top: -9px; }
+  .hand { width: 9px; height: 7px; }
+  .hand-cards .card, .hand-cards .deal-in { --card-w: 16px; }
+  .dealer-fig { width: 28px; }
+  .dealer-tag { display: none; }
+}

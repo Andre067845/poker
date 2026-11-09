@@ -1,14 +1,16 @@
 /* Póker entre Amigos — cliente. Sin dependencias salvo socket.io. */
 import { sounds } from './sound.js';
+import { avatarSvg, handsHtml, LABELS, VALUE_LABELS, DEALER } from './avatar.js';
 
 const $app = document.getElementById('app');
-const state = { user: null };
+const state = { user: null, avatarOptions: null };
 
 // ------------------------------------------------------------------ utilidades
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n) => Number(n || 0).toLocaleString('es-AR');
-// Todas las cantidades del juego se muestran en Bs (virtuales, sin valor real).
+// Todas las cantidades del juego se muestran en Bs.
 const fmt = (n) => `Bs\u00a0${num(n)}`;
+const blindsText = (t) => (!t || !t.bigBlind ? 'Sin ciegas' : `${fmt(t.smallBlind)} / ${fmt(t.bigBlind)}`);
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n));
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const dtFmt = new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeStyle: 'short' });
@@ -43,7 +45,9 @@ function toast(msg, kind = '') {
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
   el.textContent = msg;
-  document.getElementById('toasts').appendChild(el);
+  const box = document.getElementById('toasts');
+  while (box.children.length >= 2) box.firstElementChild.remove();
+  box.appendChild(el);
   setTimeout(() => el.remove(), kind === 'err' ? 5000 : 3200);
 }
 
@@ -109,6 +113,14 @@ document.addEventListener('click', (e) => {
   if (a && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); navigate(a.getAttribute('href')); }
 });
 
+async function loadMe() {
+  try {
+    const r = await api('GET', '/api/me');
+    state.user = r.user;
+    state.avatarOptions = r.avatarOptions || state.avatarOptions;
+  } catch { /* sin conexión */ }
+}
+
 async function route() {
   if (cleanup) { const c = cleanup; cleanup = null; c(); }
   document.getElementById('modal-root').innerHTML = '';
@@ -118,6 +130,8 @@ async function route() {
     if (path.startsWith('/m/') || path.startsWith('/historial')) sessionStorage.setItem('afterLogin', path);
     return renderAuth();
   }
+  if (!state.user.avatar) await loadMe();
+  if (!state.user) return renderAuth();
   const after = sessionStorage.getItem('afterLogin');
   if (after) { sessionStorage.removeItem('afterLogin'); if (after !== path) return navigate(after, true); }
 
@@ -188,7 +202,7 @@ function renderAuth(mode) {
       </div>
       <div id="auth-form"></div>
     </div>
-    <p class="disclaimer">Se juega solo con Bs virtuales gratuitos (fichas de juego): no son dinero real, no se compran, no se canjean y no hay premios.</p>
+    <p class="disclaimer">La app no maneja dinero: solo lleva la cuenta de cada partida y muestra quién le paga a quién.</p>
   </div></div>`;
   document.getElementById('tab-login').addEventListener('click', () => renderAuth('login'));
   document.getElementById('tab-register').addEventListener('click', () => renderAuth('register'));
@@ -306,12 +320,55 @@ function renderForgot() {
   });
 }
 
+// ------------------------------------------------------------------ personaje
+/** Editor de personaje: guarda solo al cambiar algo. */
+function avatarEditor(container, { onSaved } = {}) {
+  const opts = state.avatarOptions;
+  let av = { ...(state.user.avatar || {}) };
+  let timer = null;
+  function render() {
+    const row = (key) => {
+      const isColor = key === 'skin' || key === 'hairColor' || key === 'shirt';
+      const items = opts[key].map((v) => isColor
+        ? `<button type="button" class="swatch ${av[key] === v ? 'active' : ''}" data-k="${key}" data-v="${esc(v)}" style="background:${esc(v)}" aria-label="${esc(LABELS[key])}"></button>`
+        : `<button type="button" class="chip ${av[key] === v ? 'active' : ''}" data-k="${key}" data-v="${esc(v)}">${esc(VALUE_LABELS[v] || v)}</button>`).join('');
+      return `<div class="av-row"><div class="av-label">${esc(LABELS[key])}</div><div class="av-opts">${items}</div></div>`;
+    };
+    container.innerHTML = `<div class="av-editor">
+      <div class="av-preview">${avatarSvg(av)}${handsHtml(av, '<span class="mini-back"></span><span class="mini-back"></span>')}</div>
+      <div class="av-fields">${['skin', 'hair', 'hairColor', 'hat', 'glasses', 'beard', 'shirt'].map(row).join('')}</div>
+      <div class="av-status muted small" aria-live="polite"></div>
+    </div>`;
+    container.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
+      av = { ...av, [b.dataset.k]: b.dataset.v };
+      render();
+      clearTimeout(timer);
+      timer = setTimeout(save, 350);
+    }));
+  }
+  async function save() {
+    const status = container.querySelector('.av-status');
+    try {
+      const r = await api('POST', '/api/avatar', av);
+      state.user = { ...state.user, avatar: r.avatar, avatarSet: true };
+      if (status) status.textContent = 'Guardado ✓';
+      onSaved && onSaved(r.avatar);
+    } catch (e) { if (status) status.textContent = e.message; }
+  }
+  render();
+}
+
+function openAvatarModal(onSaved) {
+  modal(`<h2>Tu personaje</h2><p class="muted small">Así te van a ver en la mesa.</p><div id="av-box"></div>
+    <div class="row"><button class="btn primary" data-close>Listo</button></div>`, (m) => avatarEditor(m.querySelector('#av-box'), { onSaved }));
+}
+
 // ------------------------------------------------------------------ lobby
 async function renderLobby() {
   const u = state.user;
   shell('lobby', `
     <section class="card-panel hello">
-      <div class="avatar">${initial(u.username)}</div>
+      <button class="avatar-big" id="my-avatar" title="Personalizar personaje" aria-label="Personalizar personaje">${avatarSvg(u.avatar)}</button>
       <div style="flex:1;min-width:180px">
         <h1 style="margin:0">Hola, ${esc(u.username)}</h1>
         <div class="muted">Tu código de jugador: <span class="code-pill">${esc(u.code)}</span></div>
@@ -319,6 +376,7 @@ async function renderLobby() {
       <div class="row">
         <a class="btn primary" href="/crear" data-link>＋ Crear mesa</a>
         <button class="btn" id="join-btn">Unirse a una mesa</button>
+        <button class="btn" id="avatar-btn">🎭 Mi personaje</button>
       </div>
       <div style="flex-basis:100%" class="${u.guest ? 'hidden' : ''}"><a href="#" class="small" id="recovery-link">🔑 Generar un código de recuperación nuevo</a></div>
     </section>
@@ -328,6 +386,9 @@ async function renderLobby() {
     <h2 style="margin-top:1.4em">Tus mesas</h2>
     <div id="tables"><p class="muted">Cargando…</p></div>`);
   document.getElementById('join-btn').addEventListener('click', openJoinModal);
+  const reAvatar = () => { const b = document.getElementById('my-avatar'); if (b) b.innerHTML = avatarSvg(state.user.avatar); };
+  document.getElementById('avatar-btn').addEventListener('click', () => openAvatarModal(reAvatar));
+  document.getElementById('my-avatar').addEventListener('click', () => openAvatarModal(reAvatar));
   const claim = document.getElementById('claim-btn');
   claim && claim.addEventListener('click', () => modal(`<h2>Ponerle contraseña a tu cuenta</h2>
     <p class="muted small">Así podés entrar como <b>${esc(u.username)}</b> desde cualquier dispositivo. Conservás tu código e historial.</p>
@@ -387,7 +448,7 @@ async function renderLobby() {
           ${t.status === 'closed' ? '<span class="badge closed">Cerrada</span>' : t.gameStarted ? '<span class="badge live">En juego</span>' : '<span class="badge">Esperando</span>'}
         </div>
         <div class="muted small">Código <span class="mono">${esc(t.code)}</span> · creada por ${t.isOwner ? 'vos' : esc(t.ownerName)}</div>
-        <div class="small">Ciegas ${fmt(t.smallBlind)}/${fmt(t.bigBlind)} · Entrada ${fmt(t.startingStack)} · ${t.seated}/${t.maxPlayers} sentados</div>
+        <div class="small">Ciegas ${blindsText(t)} · Entrada ${fmt(t.startingStack)} · ${t.seated}/${t.maxPlayers} sentados</div>
         <div class="row" style="margin-top:.3em">
           ${t.status === 'open' ? `<a class="btn small primary" href="/m/${esc(t.code)}" data-link>${t.mySeat ? 'Volver a la mesa' : 'Entrar'}</a>
           <button class="btn small" data-copy="${esc(t.code)}">Copiar invitación</button>` : '<span class="muted small">Consultá sus sesiones en el historial.</span>'}
@@ -423,20 +484,27 @@ function renderCreate() {
   shell('lobby', `
     <section class="card-panel" style="max-width:640px;margin:0 auto">
       <h1>Crear mesa</h1>
-      <p class="muted small">Texas Hold'em No Limit con small blind y big blind obligatorias. Solo Bs virtuales gratuitos, sin valor real.</p>
+      <p class="muted small">Texas Hold'em No Limit. Las cantidades se cuentan en Bs.</p>
       <form id="cf" novalidate>
         <label for="name">Nombre de la mesa</label>
         <input id="name" name="name" type="text" maxlength="40" value="Mesa de ${esc(state.user.username)}" required>
+        <label>¿Se juega con small blind y big blind?</label>
+        <div class="seg yesno" role="radiogroup" aria-label="¿Se juega con ciegas?">
+          <button type="button" data-blinds="1" role="radio" aria-checked="false">Sí</button>
+          <button type="button" data-blinds="0" role="radio" aria-checked="false">No</button>
+        </div>
+        <div class="grid2 hidden" id="blinds-fields">
+          <div><label for="smallBlind">¿De cuánto la small blind?</label>
+            <input id="smallBlind" name="smallBlind" type="number" min="1" value="5" inputmode="numeric"></div>
+          <div><label for="bigBlind">¿De cuánto la big blind?</label>
+            <input id="bigBlind" name="bigBlind" type="number" min="1" value="10" inputmode="numeric">
+            <div class="hint">Sugerencia: el doble de la small blind.</div></div>
+        </div>
         <div class="grid2">
           <div><label for="maxPlayers">Cantidad de jugadores</label>
             <select id="maxPlayers" name="maxPlayers">${[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<option ${n === 6 ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
           <div><label for="turnSeconds">Tiempo máximo por turno (segundos)</label>
             <input id="turnSeconds" name="turnSeconds" type="number" min="10" max="300" value="30" inputmode="numeric"></div>
-          <div><label for="smallBlind">Small blind</label>
-            <input id="smallBlind" name="smallBlind" type="number" min="1" value="5" inputmode="numeric"></div>
-          <div><label for="bigBlind">Big blind</label>
-            <input id="bigBlind" name="bigBlind" type="number" min="1" value="10" inputmode="numeric">
-            <div class="hint">Sugerencia: el doble de la small blind.</div></div>
           <div><label for="startingStack">Entrada inicial (Bs)</label>
             <input id="startingStack" name="startingStack" type="number" min="1" value="1000" inputmode="numeric">
             <div class="hint" id="stack-hint"></div></div>
@@ -452,13 +520,22 @@ function renderCreate() {
   const f = document.getElementById('cf');
   const sb = f.smallBlind; const bb = f.bigBlind; const st = f.startingStack; const mx = f.maxBuyin;
   let bbTouched = false; let mxTouched = false;
+  let useBlinds = null;
+  f.querySelectorAll('[data-blinds]').forEach((b) => b.addEventListener('click', () => {
+    useBlinds = b.dataset.blinds === '1';
+    document.getElementById('err').innerHTML = '';
+    f.querySelectorAll('[data-blinds]').forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-checked', String(x === b)); });
+    document.getElementById('blinds-fields').classList.toggle('hidden', !useBlinds);
+    if (!useBlinds && !mxTouched) { st.value = 30; mx.value = 200; }
+    hint();
+  }));
   bb.addEventListener('input', () => { bbTouched = true; hint(); });
   mx.addEventListener('input', () => { mxTouched = true; });
   sb.addEventListener('input', () => { if (!bbTouched && Number(sb.value) > 0) bb.value = Number(sb.value) * 2; hint(); });
   st.addEventListener('input', () => { if (!mxTouched && Number(st.value) > 0) mx.value = Number(st.value) * 2; hint(); });
   function hint() {
     const b = Number(bb.value) || 0;
-    document.getElementById('stack-hint').textContent = b ? `Equivale a ${Math.floor((Number(st.value) || 0) / b)} big blinds (mínimo 10).` : '';
+    document.getElementById('stack-hint').textContent = useBlinds && b ? `Equivale a ${Math.floor((Number(st.value) || 0) / b)} big blinds (mínimo 10).` : '';
   }
   hint();
   f.addEventListener('submit', async (e) => {
@@ -466,13 +543,15 @@ function renderCreate() {
     const err = document.getElementById('err');
     const d = {
       name: f.name.value, maxPlayers: Number(f.maxPlayers.value), turnSeconds: Number(f.turnSeconds.value),
-      smallBlind: Number(sb.value), bigBlind: Number(bb.value), startingStack: Number(st.value),
+      useBlinds: !!useBlinds, smallBlind: Number(sb.value), bigBlind: Number(bb.value), startingStack: Number(st.value),
       maxBuyin: Number(mx.value), allowRebuy: f.allowRebuy.checked,
     };
     const problems = [];
     if (!d.name.trim()) problems.push('Poné un nombre para la mesa.');
-    if (d.bigBlind < d.smallBlind) problems.push('La big blind no puede ser menor que la small blind.');
-    if (d.startingStack < d.bigBlind * 10) problems.push(`La entrada inicial debe ser al menos ${fmt(d.bigBlind * 10)} (10 big blinds).`);
+    if (useBlinds === null) problems.push('Elegí si se juega con small blind y big blind.');
+    if (useBlinds && d.bigBlind < d.smallBlind) problems.push('La big blind no puede ser menor que la small blind.');
+    if (useBlinds && d.startingStack < d.bigBlind * 10) problems.push(`La entrada inicial debe ser al menos ${fmt(d.bigBlind * 10)} (10 big blinds).`);
+    if (!useBlinds && d.startingStack < 10) problems.push('La entrada inicial debe ser al menos Bs 10.');
     if (d.maxBuyin < d.startingStack) problems.push('El máximo de entrada no puede ser menor que la entrada inicial.');
     if (problems.length) { err.innerHTML = `<div class="form-error">${problems.map(esc).join('<br>')}</div>`; return; }
     try {
@@ -528,12 +607,14 @@ async function renderJoin(code) {
         <dt>Jugadores dentro</dt><dd>${t.players.length ? t.players.map((p) => `${esc(p.username)} <span class="muted small">(${fmt(p.stack)})</span>`).join(', ') : 'Nadie todavía'}</dd>
         <dt>Asientos disponibles</dt><dd>${t.freeSeats} de ${t.maxPlayers}</dd>
         <dt>Entrada inicial</dt><dd>${fmt(t.startingStack)}</dd>
-        <dt>Ciegas</dt><dd>Small ${fmt(t.smallBlind)} · Big ${fmt(t.bigBlind)}</dd>
+        <dt>Ciegas</dt><dd>${t.bigBlind ? `Small ${fmt(t.smallBlind)} · Big ${fmt(t.bigBlind)}` : 'Sin ciegas'}</dd>
         <dt>Tiempo por turno</dt><dd>${t.turnSeconds} s</dd>
         <dt>Partida</dt><dd>${t.gameStarted ? (t.handInProgress ? 'Ya comenzó (hay una mano en curso: vas a recibir cartas en la siguiente)' : 'Ya comenzó') : 'Todavía no comenzó'}</dd>
         <dt>Recargas</dt><dd>${t.allowRebuy ? 'Permitidas entre manos' : 'No permitidas'}</dd>
       </dl>
       ${full ? '<div class="form-error">La mesa está completa. Podés entrar a mirar y sentarte cuando se libere un lugar.</div>' : `
+      <h2 style="margin-top:1.2em">${state.user.avatarSet ? 'Tu personaje' : 'Antes de entrar, armá tu personaje'}</h2>
+      <div id="join-avatar"></div>
       <form id="sf" novalidate>
         <label for="amount">¿Con cuántos Bs querés entrar?</label>
         <input id="amount" type="number" inputmode="numeric" min="${t.minBuyin}" max="${t.maxBuyin}" value="${t.startingStack}">
@@ -544,6 +625,8 @@ async function renderJoin(code) {
       </form>`}
       ${full ? `<div class="row" style="margin-top:1em"><button class="btn primary" id="watch">Mirar la mesa</button></div>` : ''}
     </section>`);
+  const ja = document.getElementById('join-avatar');
+  if (ja) avatarEditor(ja);
   const w = document.getElementById('watch');
   w && w.addEventListener('click', () => renderTable(code));
   const f = document.getElementById('sf');
@@ -567,6 +650,7 @@ function renderTable(code, opts = {}) {
       <div class="title" id="t-title">Mesa ${esc(code)}</div>
       <span class="conn warn" id="conn">Conectando…</span>
       <button class="icon-btn chat-btn" id="t-chat" title="Chat" aria-label="Abrir chat">💬<span class="badge-n hidden" id="chat-badge">0</span></button>
+      <button class="icon-btn" id="t-accounts" title="Cuentas: quién le paga a quién" aria-label="Ver cuentas">💰</button>
       <button class="icon-btn" id="t-invite" title="Copiar invitación">🔗</button>
       <button class="icon-btn wide-only" id="t-rules" title="Reglas y combinaciones">?</button>
       <button class="icon-btn wide-only" id="t-sound" title="Sonido">${sounds.enabled ? '🔊' : '🔇'}</button>
@@ -592,6 +676,11 @@ function renderTable(code, opts = {}) {
   let lastTurnSeat = null;
   let timerInt = null;
   let closedByOwner = false;
+  const pendingAnims = new Map(); // asiento -> tipo de acción recién hecha
+  let lastHandNo = null;
+  let lastBoardLen = 0;
+  let lastResultAt = null;
+  const DEALER_POS = { x: 50, y: 23 };
   let chatOpen = false;
   let unread = 0;
   const chatIds = new Set();
@@ -636,10 +725,17 @@ function renderTable(code, opts = {}) {
   });
   socket.on('table:state', applyState);
   socket.on('table:chat', (m) => addChat(m, false));
-  socket.on('table:closed', (m) => { closedByOwner = true; toast(m.message, 'err'); });
+  socket.on('table:closed', (m) => {
+    closedByOwner = true;
+    toast(m.message, 'err');
+    if (m.accounts) modal(`${accountsHtml(m.accounts, 'Cuentas finales')}<div class="row"><a class="btn" href="/historial" data-link data-close>Ver historial</a><button class="btn primary" data-close>Cerrar</button></div>`);
+  });
   socket.on('table:event', (ev) => {
     if (ev.kind === 'deal') sounds.play('deal');
-    else if (ev.kind === 'action') sounds.play(ev.type === 'fold' ? 'fold' : ev.type === 'check' ? 'check' : 'chips');
+    else if (ev.kind === 'action') {
+      pendingAnims.set(ev.seat, ev.type);
+      sounds.play(ev.type === 'fold' ? 'fold' : ev.type === 'check' ? 'check' : 'chips');
+    }
     else if (ev.kind === 'win') sounds.play('win');
     else if (ev.kind === 'show') { sounds.play('deal'); if (st && ev.seat !== st.mySeat) toast(`${ev.username} mostró sus cartas`); }
     else if (ev.kind === 'standup' && st && ev.reason === 'disconnect') toast(`${ev.username} perdió la conexión y dejó la mesa`);
@@ -650,7 +746,7 @@ function renderTable(code, opts = {}) {
     if (!s) return;
     st = s;
     clockOffset = s.serverTime - Date.now();
-    document.getElementById('t-title').textContent = `${s.table.name} · ${fmt(s.table.smallBlind)}/${fmt(s.table.bigBlind)}`;
+    document.getElementById('t-title').textContent = `${s.table.name} · ${blindsText(s.table)}`;
     const myTurn = s.hand && s.mySeat != null && s.hand.turnSeat === s.mySeat;
     if (myTurn && lastTurnSeat !== s.mySeat) { sounds.play('turn'); if (navigator.vibrate) navigator.vibrate(120); }
     lastTurnSeat = s.hand ? s.hand.turnSeat : null;
@@ -664,7 +760,7 @@ function renderTable(code, opts = {}) {
     const k = ((seatIdx - anchor) % n + n) % n;
     const ang = Math.PI / 2 + (k * 2 * Math.PI) / n;
     const narrow = window.matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
-    const rx = narrow ? 40 : 44; const ry = narrow ? 42 : 41;
+    const rx = narrow ? 40 : 44; const ry = narrow ? 40 : 38;
     return { x: 50 + rx * Math.cos(ang), y: 50 + ry * Math.sin(ang), ang };
   }
 
@@ -698,9 +794,33 @@ function renderTable(code, opts = {}) {
     area.style.height = `${h}px`;
   }
 
+  /** Hace volar un elemento (carta o ficha) de un punto a otro de la mesa (en %). */
+  function fly(area, from, to, cls, delay = 0, dur = 450) {
+    const el = document.createElement('div');
+    el.className = `flyer ${cls}`;
+    el.style.left = `${from.x}%`;
+    el.style.top = `${from.y}%`;
+    el.style.transitionDuration = `${dur}ms`;
+    el.style.opacity = '0';
+    area.appendChild(el);
+    setTimeout(() => {
+      el.style.opacity = '1';
+      el.style.left = `${to.x}%`;
+      el.style.top = `${to.y}%`;
+      el.classList.add('go');
+    }, delay + 20);
+    setTimeout(() => el.remove(), delay + dur + 250);
+  }
+
   function drawTable() {
     const area = document.getElementById('area');
     if (!area || !st) return;
+    const n0 = st.table.maxPlayers;
+    const hand0 = st.hand;
+    const newHand = !!(hand0 && hand0.number !== lastHandNo);
+    const boardNow = hand0 ? hand0.board.length : (st.lastResult ? st.lastResult.board.length : 0);
+    const boardFrom = newHand ? 0 : (hand0 && boardNow > lastBoardLen ? lastBoardLen : boardNow);
+    const dealing = newHand || boardFrom < boardNow;
     const n = st.table.maxPlayers;
     const h = st.hand;
     const lr = st.lastResult;
@@ -712,7 +832,12 @@ function renderTable(code, opts = {}) {
     // centro: tablero, botes y estado
     const board = h ? h.board : lr ? lr.board : [];
     let center = '<div class="board">';
-    for (let i = 0; i < 5; i++) center += board[i] ? cardHtml(board[i], bestCards.size && !bestCards.has(board[i]) ? 'dim' : bestCards.has(board[i]) ? 'win' : '') : '<div class="slot"></div>';
+    for (let i = 0; i < 5; i++) {
+      if (!board[i]) { center += '<div class="slot"></div>'; continue; }
+      const extra = bestCards.size && !bestCards.has(board[i]) ? 'dim' : bestCards.has(board[i]) ? 'win' : '';
+      const anim = i >= boardFrom ? ` flip-in" style="animation-delay:${(i - boardFrom) * 160}ms` : '';
+      center += cardHtml(board[i], extra + anim);
+    }
     center += '</div>';
     if (h) {
       const side = h.pots.length > 1 ? h.pots.map((p, i) => `<span class="pot">${i === 0 ? 'Principal' : `Secundario ${i}`}: ${fmt(p.amount)}</span>`).join('') : '';
@@ -732,6 +857,8 @@ function renderTable(code, opts = {}) {
         : `Esperando para empezar · ${seated} sentados · ${ready} listos`}</div>`;
     }
     html += `<div class="center">${center}</div>`;
+    html += `<div class="dealer-fig" style="left:${DEALER_POS.x}%;top:${DEALER_POS.y}%" aria-label="Crupier">
+      ${avatarSvg(DEALER)}${handsHtml(DEALER, '', dealing ? 'dealing' : '')}<div class="dealer-tag">Crupier</div></div>`;
 
     // asientos
     const dealer = st.dealerSeat;
@@ -747,9 +874,14 @@ function renderTable(code, opts = {}) {
       const isTurn = h && h.turnSeat === i;
       const me = i === st.mySeat;
       const cls = ['seat', isTurn ? 'turn' : '', me ? 'me' : '', s.folded ? 'folded' : ''].join(' ');
-      let cards = '';
-      if (s.cards && !me) cards = `<div class="hole">${s.cards.map((c) => cardHtml(c, bestCards.has(c) ? 'win' : '')).join('')}</div>`;
-      else if (s.hasCards && !me) cards = `<div class="hole">${cardHtml(null)}${cardHtml(null)}</div>`;
+      let inner = '';
+      if (s.cards && (!me || !h || s.hasCards)) inner = s.cards.map((c) => cardHtml(c, bestCards.has(c) ? 'win' : '')).join('');
+      else if (s.hasCards) inner = `${cardHtml(null)}${cardHtml(null)}`;
+      const anim = pendingAnims.get(i);
+      const animCls = anim === 'check' ? 'knock' : (anim === 'bet' || anim === 'raise' || anim === 'call' || anim === 'allin') ? 'push' : '';
+      const dealOrder = newHand && h ? h.dealOrder.indexOf(i) : -1;
+      if (dealOrder >= 0 && inner) inner = `<div class="deal-in" style="animation-delay:${(dealOrder + h.dealOrder.length) * 90 + 380}ms">${inner}</div>`;
+      const figure = `<div class="figure">${avatarSvg(s.avatar, { title: s.username })}${handsHtml(s.avatar, inner, animCls)}</div>`;
       let marks = '';
       if (dealer === i) marks += '<span class="mk d" title="Dealer">D</span>';
       if (h && h.sbSeat === i) marks += '<span class="mk sb" title="Small blind">SB</span>';
@@ -771,7 +903,7 @@ function renderTable(code, opts = {}) {
       const bubble = bub && bub.until > Date.now() ? `<div class="bubble">${esc(bub.text)}</div>` : '';
       html += `<div class="${cls}" style="left:${p.x}%;top:${p.y}%">
         ${bubble}
-        ${cards}
+        ${figure}
         <div class="seat-box">
           <div class="markers">${marks}</div>
           <div class="name" title="${esc(s.username)} · ${esc(s.code)}">${esc(s.username)}${me ? ' (vos)' : ''}</div>
@@ -789,6 +921,35 @@ function renderTable(code, opts = {}) {
     }
     area.innerHTML = html;
     area.querySelectorAll('[data-sit]').forEach((b) => b.addEventListener('click', () => sitModal(Number(b.dataset.sit))));
+
+    // reparto: el crupier tira dos cartas a cada jugador
+    if (newHand && h) {
+      h.dealOrder.forEach((seat, k) => {
+        const p = seatPos(seat, n0, st.mySeat);
+        for (let r = 0; r < 2; r++) fly(area, DEALER_POS, { x: p.x, y: p.y - 4 }, 'fly-card', (r * h.dealOrder.length + k) * 90, 380);
+      });
+    }
+    // fichas a la mesa al apostar; cartas al centro al retirarse
+    for (const [seat, type] of pendingAnims) {
+      const p = seatPos(seat, n0, st.mySeat);
+      if (type === 'fold') {
+        fly(area, p, { x: 50, y: 42 }, 'fly-card', 0, 420);
+        fly(area, p, { x: 51, y: 43 }, 'fly-card', 60, 420);
+      } else if (type !== 'check') {
+        const to = { x: 50 + (p.x - 50) * 0.58, y: 50 + (p.y - 50) * 0.55 };
+        for (let c = 0; c < 3; c++) fly(area, p, to, 'fly-chip', c * 70, 380);
+      }
+    }
+    pendingAnims.clear();
+    // el bote va al ganador
+    if (lr && !h && lr.at !== lastResultAt) {
+      for (const w of lr.winners) {
+        const p = seatPos(w.seat, n0, st.mySeat);
+        for (let c = 0; c < 5; c++) fly(area, { x: 50, y: 52 }, p, 'fly-chip', 250 + c * 80, 520);
+      }
+    }
+    lastResultAt = lr ? lr.at : lastResultAt;
+    if (hand0) { lastHandNo = hand0.number; lastBoardLen = boardNow; }
   }
 
   // ---------- chat
@@ -1043,6 +1204,14 @@ function renderTable(code, opts = {}) {
     });
   }
 
+  async function showAccounts() {
+    const r = await call('table:accounts');
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    if (!r.accounts) { toast('Todavía no hay movimientos en esta mesa'); return; }
+    modal(`${accountsHtml(r.accounts, 'Cuentas de la partida')}<div class="row"><button class="btn primary" data-close>Cerrar</button></div>`);
+  }
+  document.getElementById('t-accounts').addEventListener('click', showAccounts);
+
   async function leaveTable() {
     const inHand = st.hand && st.seats[st.mySeat] && st.seats[st.mySeat].hasCards;
     const ok = await confirmDialog('¿Abandonar la mesa?',
@@ -1077,7 +1246,7 @@ function renderTable(code, opts = {}) {
         <div class="invite-box"><label>Enlace de invitación</label>
           <div class="copy-row"><input type="text" readonly value="${esc(inviteLink(code))}"><button class="btn" id="m-copy">Copiar</button></div>
           <div class="muted small">Código: <span class="mono">${esc(code)}</span></div></div>
-        ${st ? `<dl class="info-list small"><dt>Ciegas</dt><dd>${fmt(st.table.smallBlind)} / ${fmt(st.table.bigBlind)}</dd>
+        ${st ? `<dl class="info-list small"><dt>Ciegas</dt><dd>${blindsText(st.table)}</dd>
           <dt>Entrada</dt><dd>${fmt(st.table.startingStack)} (máx. ${fmt(st.table.maxBuyin)})</dd>
           <dt>Turno</dt><dd>${st.table.turnSeconds} s</dd><dt>Recargas</dt><dd>${st.table.allowRebuy ? 'Sí, entre manos' : 'No'}</dd>
           <dt>Creador</dt><dd>${esc(st.table.ownerName)}</dd></dl>` : ''}
@@ -1111,7 +1280,7 @@ function renderTable(code, opts = {}) {
     });
   });
 
-  const onResize = () => { fitArea(); drawTable(); };
+  const onResize = () => { fitArea(); pendingAnims.clear(); drawTable(); };
   fitArea();
   window.addEventListener('resize', onResize);
   const beforeUnload = (e) => { if (st && st.hand && st.mySeat != null && st.seats[st.mySeat] && st.seats[st.mySeat].hasCards) { e.preventDefault(); e.returnValue = ''; } };
@@ -1128,6 +1297,32 @@ function renderTable(code, opts = {}) {
     socket.emit('table:exit');
     socket.close();
   };
+}
+
+// ------------------------------------------------------------------ cuentas
+/** "Entró con 30 → +20 → +50 → +10" */
+function loadsText(p) {
+  return [`Entró con ${fmt(p.initial)}`, ...p.reloads.map((r) => `+${fmt(r.amount)}`)].join(' → ');
+}
+
+function paymentsHtml(payments) {
+  if (!payments || !payments.length) return '<p class="muted">Nadie le debe nada a nadie.</p>';
+  return `<div class="pay-list">${payments.map((x) => `<div class="pay"><b>${esc(x.from)}</b> le paga a <b>${esc(x.to)}</b><span class="amt">${fmt(x.amount)}</span></div>`).join('')}</div>`;
+}
+
+function accountsHtml(acc, title) {
+  const ended = !!acc.endedAt;
+  return `<h2>${esc(title)}</h2>
+    <p class="muted small">${ended ? 'Partida terminada.' : 'Partida en curso: los saldos son los de la última mano terminada.'}</p>
+    <h3>Quién le paga a quién</h3>
+    ${paymentsHtml(acc.payments)}
+    <h3 style="margin-top:1em">Detalle por jugador</h3>
+    <div class="acc-cards">${acc.players.map((p) => `<div class="acc-card">
+      <div class="acc-head"><b>${esc(p.username)}</b><span class="muted small mono">${esc(p.code)}</span><span class="spacer"></span>
+        <b class="${p.balance > 0 ? 'pos' : p.balance < 0 ? 'neg' : ''}">${signed(p.balance)} ${p.balance > 0 ? 'arriba' : p.balance < 0 ? 'abajo' : ''}</b></div>
+      <div class="loads">${esc(loadsText(p))}</div>
+      <div class="muted small">Cargó ${p.reloadCount} ${p.reloadCount === 1 ? 'vez' : 'veces'} · Total cargado ${fmt(p.totalLoaded)} · Quedó con ${fmt(p.finalAmount)}</div>
+    </div>`).join('')}</div>`;
 }
 
 // ------------------------------------------------------------------ historial
@@ -1173,26 +1368,32 @@ async function renderSession(id) {
       <dt>Identificador de sesión</dt><dd class="mono small">${esc(s.id)}</dd>
       <dt>Fecha y hora de inicio</dt><dd>${fmtDate(s.startedAt)}</dd>
       <dt>Hora de cierre</dt><dd>${s.endedAt ? fmtDate(s.endedAt) : 'Sesión en curso'}</dd>
-      <dt>Ciegas</dt><dd>${fmt(s.smallBlind)} / ${fmt(s.bigBlind)}</dd>
+      <dt>Ciegas</dt><dd>${blindsText(s)}</dd>
       <dt>Zona horaria</dt><dd>${esc(tz)}</dd>
     </dl></div>
-    <h2 style="margin-top:1.2em">Bs por jugador</h2>
+    <h2 style="margin-top:1.2em">Jugadores, cargas y con cuánto quedaron</h2>
     ${live ? '<p class="muted small">La sesión sigue abierta: los Bs restantes son los de la última mano terminada.</p>' : ''}
     <div class="tablewrap"><table class="data"><thead><tr>
-      <th>Jugador</th><th>Código</th><th class="num">Bs iniciales</th><th>Recargas (hora)</th><th class="num">Total cargado</th>
-      <th class="num">Retiradas</th><th class="num">Restantes</th><th class="num">Balance neto</th></tr></thead><tbody>
+      <th>Jugador</th><th>Código</th><th class="num">Entró con</th><th>Cargas (hora)</th><th class="num">Veces que cargó</th><th class="num">Total cargado</th>
+      <th class="num">Retiradas</th><th class="num">Restantes</th><th class="num">Quedó con</th><th class="num">Balance neto</th></tr></thead><tbody>
       ${s.players.map((p) => `<tr>
         <td><b>${esc(p.username)}</b>${p.seated ? ' <span class="badge live">en la mesa</span>' : ''}</td>
         <td class="mono">${esc(p.code)}</td>
         <td class="num">${fmt(p.initial)}<div class="muted small">${fmtTime(p.initialAt)}</div></td>
-        <td>${p.reloads.length ? p.reloads.map((r) => `<div>${fmt(r.amount)} <span class="muted small">· ${fmtTime(r.at)}${r.kind === 'reentry' ? ' · reingreso' : ''}</span></div>`).join('') : '<span class="muted">—</span>'}</td>
+        <td>${p.reloads.length ? p.reloads.map((r) => `<div>+${fmt(r.amount)} <span class="muted small">· ${fmtTime(r.at)}${r.kind === 'reentry' ? ' · reingreso' : ''}</span></div>`).join('') : '<span class="muted">—</span>'}
+          <div class="muted small loads">${esc(loadsText(p))}</div></td>
+        <td class="num">${p.reloadCount}</td>
         <td class="num">${fmt(p.totalLoaded)}</td>
         <td class="num">${fmt(p.withdrawn)}</td>
         <td class="num">${fmt(p.remaining)}</td>
+        <td class="num"><b>${fmt(p.finalAmount)}</b></td>
         <td class="num ${p.balance > 0 ? 'pos' : p.balance < 0 ? 'neg' : ''}"><b>${signed(p.balance)}</b></td></tr>`).join('')}
-      <tr><td colspan="4"><b>Total</b></td><td class="num">${fmt(totals.loaded)}</td><td class="num">${fmt(totals.w)}</td><td class="num">${fmt(totals.r)}</td><td class="num"><b>${signed(totals.b)}</b></td></tr>
+      <tr><td colspan="5"><b>Total</b></td><td class="num">${fmt(totals.loaded)}</td><td class="num">${fmt(totals.w)}</td><td class="num">${fmt(totals.r)}</td><td class="num">${fmt(totals.w + totals.r)}</td><td class="num"><b>${signed(totals.b)}</b></td></tr>
       </tbody></table></div>
-    <p class="muted small">Balance = Bs retirados + Bs restantes − total de Bs cargados. Son Bs virtuales sin valor real.</p>
+    <h2 style="margin-top:1.2em">Quién le paga a quién</h2>
+    ${live ? '<p class="muted small">La partida sigue abierta: esto es lo que habría que pagar si terminara ahora.</p>' : ''}
+    <div class="card-panel">${paymentsHtml(s.payments)}</div>
+    <p class="muted small">Balance = Bs retirados + Bs restantes − total de Bs cargados.</p>
     <h2 style="margin-top:1.2em">Manos jugadas (${s.hands.length})</h2>
     <div class="card-panel">${s.hands.length ? s.hands.slice().reverse().map((h) => `
       <div class="hand-row"><div><b>Mano #${h.number}</b> <span class="muted small">· ${fmtTime(h.startedAt)}${h.endedAt ? ` – ${fmtTime(h.endedAt)}` : ' · en curso'}</span></div>
@@ -1210,7 +1411,7 @@ function rulesHtml() {
   return `<h2>Cómo se juega</h2>
   <p>Cada jugador recibe <b>dos cartas privadas</b>. Se reparten hasta <b>cinco cartas comunitarias</b> (flop: 3, turn: 1, river: 1). Gana quien forme la <b>mejor combinación de cinco cartas</b> usando cualquier mezcla de sus dos cartas y las comunitarias, o quien quede solo cuando los demás se retiran.</p>
   <ul>
-    <li><b>Ciegas:</b> antes de repartir, los dos jugadores a la izquierda del botón (D) ponen la small blind y la big blind. Con dos jugadores, el botón pone la small blind y habla primero antes del flop.</li>
+    <li><b>Ciegas (si la mesa las usa):</b> antes de repartir, los dos jugadores a la izquierda del botón (D) ponen la small blind y la big blind. Con dos jugadores, el botón pone la small blind y habla primero antes del flop.</li>
     <li><b>Rondas:</b> preflop, flop, turn y river. En cada una podés <b>pasar</b> (si no hay apuesta), <b>igualar</b>, <b>apostar/subir</b> o <b>retirarte</b>.</li>
     <li><b>No Limit:</b> podés apostar todos tus Bs (all-in). La subida mínima es igual a la última subida (o a la big blind).</li>
     <li><b>All-in y botes secundarios:</b> si alguien va all-in por menos, solo puede ganar lo que igualó; el resto se juega en un bote secundario.</li>
@@ -1241,6 +1442,7 @@ function renderRules() {
   try {
     const r = await api('GET', '/api/me');
     state.user = r.user;
+    state.avatarOptions = r.avatarOptions;
   } catch { state.user = null; }
   route();
 }());

@@ -117,11 +117,6 @@ function createApp(overrides = {}) {
     auth.destroySession(req.token);
     res.clearCookie(COOKIE, { path: '/' });
   }));
-  app.post('/api/auth/guest', authLimiter, wrap((req, res) => {
-    const user = auth.guest(req.body || {});
-    setSessionCookie(req, res, user);
-    return { user };
-  }));
   app.post('/api/auth/claim', authLimiter, requireUser, wrap((req) => auth.claimGuest(req.user.id, (req.body || {}).password)));
   app.post('/api/auth/recover', authLimiter, wrap((req, res) => {
     const { user, recoveryCode } = auth.recoverWithCode(req.body || {});

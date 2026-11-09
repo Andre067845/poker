@@ -86,6 +86,8 @@ main.page { max-width: 980px; margin: 0 auto; padding: 1.2em 1em 4em; }
 .auth-hero .suits { font-size: 2rem; letter-spacing: .3em; }
 .auth-hero .suits .r { color: var(--red); }
 .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg2); border-radius: 10px; padding: 4px; margin-bottom: 1em; }
+.seg.seg3 { grid-template-columns: 1fr 1fr 1fr; }
+.guest-note { display: flex; gap: .8em; align-items: center; flex-wrap: wrap; justify-content: space-between; border-color: var(--accent); }
 .seg button { background: transparent; border: 0; color: var(--muted); min-height: 42px; border-radius: 8px; font-weight: 700; cursor: pointer; }
 .seg button.active { background: var(--panel2); color: var(--text); }
 .disclaimer { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 1em; }

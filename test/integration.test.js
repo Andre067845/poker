@@ -417,3 +417,46 @@ test('respaldo externo: los datos sobreviven a un servidor sin disco', async () 
   await inst.close();
   fs.rmSync(dir2, { recursive: true, force: true });
 });
+
+test('invitado: entra solo con un nombre, juega y después puede ponerle contraseña', async (t) => {
+  const inst = createApp({ dbFile: ':memory:', resultDelayMs: 60000, graceMs: 60000, sweepMs: 1000 });
+  const base = `http://127.0.0.1:${await inst.listen(0)}`;
+  const host = client(base); const amigo = client(base);
+  await host.post('/api/auth/register', { username: 'anfitrion', password: '12345678' });
+  const code = (await host.post('/api/tables', { name: 'Abierta', maxPlayers: 4, startingStack: 500, smallBlind: 5, bigBlind: 10, turnSeconds: 30, allowRebuy: false, maxBuyin: 500 })).data.table.code;
+
+  let r = await amigo.post('/api/auth/guest', { username: 'x' });
+  assert.equal(r.status, 400, 'nombre muy corto');
+  r = await amigo.post('/api/auth/guest', { username: 'ANFITRION' });
+  assert.equal(r.status, 409, 'no puede usar un nombre ya tomado');
+  r = await amigo.post('/api/auth/guest', { username: 'Pepe' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.user.guest, true);
+  assert.match(r.data.user.code, /^PKR-/);
+  r = await amigo.get('/api/me');
+  assert.equal(r.data.user.username, 'Pepe', 'la sesión queda guardada');
+  r = await client(base).post('/api/auth/login', { username: 'Pepe', password: '' });
+  assert.equal(r.status, 401, 'un invitado no tiene contraseña con la que entrar');
+
+  // el invitado se sienta y juega
+  const sh = host.socket(); const sa = amigo.socket();
+  t.after(async () => { sh.close(); sa.close(); await inst.close(); });
+  await Promise.all([sh.ready, sa.ready]);
+  assert.ok((await sa.call('table:join', { code })).ok);
+  await sh.call('table:join', { code });
+  assert.ok((await sa.call('table:sit', { amount: 500, requestId: 'pepe-sit-01' })).ok);
+  await sh.call('table:sit', { amount: 500, requestId: 'host-sit-01' });
+  await sa.call('table:ready', { ready: true }); await sh.call('table:ready', { ready: true });
+  assert.ok((await sh.call('table:start')).ok);
+  await until(() => sa.state && sa.state.hand && sa.state.seats[sa.state.mySeat].cards, 2000, 'cartas del invitado');
+
+  // le pone contraseña y conserva su código
+  r = await amigo.post('/api/auth/claim', { password: 'clave-de-pepe' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.user.guest, false);
+  assert.ok(r.data.recoveryCode);
+  r = await client(base).post('/api/auth/login', { username: 'pepe', password: 'clave-de-pepe' });
+  assert.equal(r.status, 200);
+  r = await amigo.post('/api/auth/claim', { password: 'otra-clave-1' });
+  assert.equal(r.status, 400, 'solo una vez');
+});

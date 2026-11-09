@@ -169,7 +169,7 @@ function bindShell() {
 }
 
 // ------------------------------------------------------------------ autenticación
-function renderAuth(mode = 'login') {
+function renderAuth(mode = 'guest') {
   const pending = sessionStorage.getItem('afterLogin');
   $app.innerHTML = `
   <div class="auth-wrap"><div class="auth-box">
@@ -177,10 +177,11 @@ function renderAuth(mode = 'login') {
       <div class="suits">♠<span class="r">♥</span>♣<span class="r">♦</span></div>
       <h1>Póker entre Amigos</h1>
       <p class="muted">Texas Hold'em en tiempo real con tus amigos.</p>
-      ${pending && pending.startsWith('/m/') ? '<p class="form-ok">Te invitaron a una mesa. Iniciá sesión o creá una cuenta y te llevamos directo.</p>' : ''}
+      ${pending && pending.startsWith('/m/') ? '<p class="form-ok">Te invitaron a una mesa. Escribí tu nombre y te llevamos directo.</p>' : ''}
     </div>
     <div class="card-panel">
-      <div class="seg" role="tablist">
+      <div class="seg seg3" role="tablist">
+        <button id="tab-guest" class="${mode === 'guest' ? 'active' : ''}" role="tab">Jugar ya</button>
         <button id="tab-login" class="${mode === 'login' ? 'active' : ''}" role="tab">Iniciar sesión</button>
         <button id="tab-register" class="${mode === 'register' ? 'active' : ''}" role="tab">Crear cuenta</button>
       </div>
@@ -188,10 +189,21 @@ function renderAuth(mode = 'login') {
     </div>
     <p class="disclaimer">Se juega solo con Bs virtuales gratuitos (fichas de juego): no son dinero real, no se compran, no se canjean y no hay premios.</p>
   </div></div>`;
+  document.getElementById('tab-guest').addEventListener('click', () => renderAuth('guest'));
   document.getElementById('tab-login').addEventListener('click', () => renderAuth('login'));
   document.getElementById('tab-register').addEventListener('click', () => renderAuth('register'));
   const box = document.getElementById('auth-form');
-  if (mode === 'login') {
+  if (mode === 'guest') {
+    box.innerHTML = `
+      <form id="f" novalidate>
+        <label for="username">¿Cómo te llamás?</label>
+        <input id="username" name="username" type="text" autocomplete="nickname" autocapitalize="words" maxlength="20" placeholder="Tu nombre en la mesa" required>
+        <div class="hint">Sin cuenta ni contraseña. Entre 3 y 20 caracteres.</div>
+        <div id="err"></div>
+        <button class="btn primary block" style="margin-top:1em">Entrar a jugar</button>
+      </form>
+      <p class="muted small" style="text-align:center;margin-top:1em">Tu partida queda guardada en este navegador. Si querés usarla en otro dispositivo, después podés ponerle una contraseña.</p>`;
+  } else if (mode === 'login') {
     box.innerHTML = `
       <form id="f" novalidate>
         <label for="username">Nombre de usuario</label>
@@ -228,7 +240,8 @@ function renderAuth(mode = 'login') {
     const btn = f.querySelector('button');
     btn.disabled = true;
     try {
-      const r = await api('POST', mode === 'login' ? '/api/auth/login' : '/api/auth/register', data);
+      const url = mode === 'guest' ? '/api/auth/guest' : mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const r = await api('POST', url, data);
       state.user = r.user;
       if (mode === 'register') {
         await showRecoveryCode(r.recoveryCode, `¡Bienvenido/a, ${r.user.username}! Tu código de jugador es ${r.user.code}.`);
@@ -317,11 +330,35 @@ async function renderLobby() {
         <a class="btn primary" href="/crear" data-link>＋ Crear mesa</a>
         <button class="btn" id="join-btn">Unirse a una mesa</button>
       </div>
-      <div style="flex-basis:100%"><a href="#" class="small" id="recovery-link">🔑 Generar un código de recuperación nuevo</a></div>
+      <div style="flex-basis:100%" class="${u.guest ? 'hidden' : ''}"><a href="#" class="small" id="recovery-link">🔑 Generar un código de recuperación nuevo</a></div>
     </section>
+    ${u.guest ? `<section class="card-panel guest-note" style="margin-top:1em">
+      <div><b>Estás jugando como invitado.</b> <span class="muted small">Si borrás los datos del navegador o cambiás de dispositivo, perdés esta cuenta.</span></div>
+      <button class="btn small" id="claim-btn">Ponerle contraseña</button></section>` : ''}
     <h2 style="margin-top:1.4em">Tus mesas</h2>
     <div id="tables"><p class="muted">Cargando…</p></div>`);
   document.getElementById('join-btn').addEventListener('click', openJoinModal);
+  const claim = document.getElementById('claim-btn');
+  claim && claim.addEventListener('click', () => modal(`<h2>Ponerle contraseña a tu cuenta</h2>
+    <p class="muted small">Así podés entrar como <b>${esc(u.username)}</b> desde cualquier dispositivo. Conservás tu código e historial.</p>
+    <form id="clf"><label for="cl-pw">Contraseña</label><input id="cl-pw" type="password" autocomplete="new-password" minlength="8">
+    <label for="cl-pw2">Repetila</label><input id="cl-pw2" type="password" autocomplete="new-password">
+    <div class="hint">Mínimo 8 caracteres.</div><div id="cl-err"></div>
+    <div class="row"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary">Guardar</button></div></form>`,
+  (m, close) => {
+    m.querySelector('#clf').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const pw = m.querySelector('#cl-pw').value;
+      if (pw !== m.querySelector('#cl-pw2').value) { m.querySelector('#cl-err').innerHTML = '<div class="form-error">Las contraseñas no coinciden</div>'; return; }
+      try {
+        const r = await api('POST', '/api/auth/claim', { password: pw });
+        state.user = r.user;
+        close();
+        await showRecoveryCode(r.recoveryCode, 'Listo, tu cuenta ya tiene contraseña.');
+        renderLobby();
+      } catch (e2) { m.querySelector('#cl-err').innerHTML = `<div class="form-error">${esc(e2.message)}</div>`; }
+    });
+  }));
   document.getElementById('recovery-link').addEventListener('click', (e) => {
     e.preventDefault();
     modal(`<h2>Código de recuperación nuevo</h2>

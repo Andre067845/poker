@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT NOT NULL,
   recovery_hash TEXT,
+  is_guest      INTEGER NOT NULL DEFAULT 0,
   code          TEXT NOT NULL UNIQUE,
   created_at    TEXT NOT NULL
 );
@@ -106,8 +107,7 @@ function openDb(file) {
 
 /** Migraciones de bases creadas con versiones anteriores (cuando el registro pedía correo). */
 function migrate(db) {
-  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
-  if (!cols.includes('recovery_hash')) db.exec('ALTER TABLE users ADD COLUMN recovery_hash TEXT');
+  let cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (cols.includes('email')) {
     // El correo ya no se usa: se elimina la columna (y su índice único).
     db.exec('PRAGMA foreign_keys = OFF');
@@ -117,16 +117,20 @@ function migrate(db) {
         username TEXT NOT NULL UNIQUE COLLATE NOCASE,
         password_hash TEXT NOT NULL,
         recovery_hash TEXT,
+        is_guest INTEGER NOT NULL DEFAULT 0,
         code TEXT NOT NULL UNIQUE,
         created_at TEXT NOT NULL);
-      INSERT INTO users_new (id, username, password_hash, recovery_hash, code, created_at)
-        SELECT id, username, password_hash, recovery_hash, code, created_at FROM users;
+      INSERT INTO users_new (id, username, password_hash, code, created_at)
+        SELECT id, username, password_hash, code, created_at FROM users;
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
       DROP TABLE IF EXISTS password_resets;
       COMMIT;`);
     db.exec('PRAGMA foreign_keys = ON');
+    cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   }
+  if (!cols.includes('recovery_hash')) db.exec('ALTER TABLE users ADD COLUMN recovery_hash TEXT');
+  if (!cols.includes('is_guest')) db.exec('ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0');
 }
 
 const now = () => new Date().toISOString();

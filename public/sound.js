@@ -29,6 +29,22 @@ function tone(freq, start, dur, type = 'sine', gain = 0.15) {
   o.stop(t + dur + 0.02);
 }
 
+// Safari (iPhone/iPad) solo permite sonido después de un toque del usuario:
+// en el primer toque se crea y "desbloquea" el audio.
+function unlock() {
+  const a = ac();
+  if (!a) return;
+  try {
+    const b = a.createBuffer(1, 1, 22050);
+    const src = a.createBufferSource();
+    src.buffer = b; src.connect(a.destination); src.start(0);
+  } catch { /* nada */ }
+  if (a.state === 'running') {
+    ['touchend', 'pointerdown', 'keydown'].forEach((ev) => document.removeEventListener(ev, unlock, true));
+  }
+}
+['touchend', 'pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, unlock, true));
+
 const LIB = {
   deal: () => { tone(900, 0, 0.05, 'triangle', 0.08); tone(1100, 0.07, 0.05, 'triangle', 0.08); },
   check: () => { tone(220, 0, 0.08, 'square', 0.06); tone(220, 0.1, 0.08, 'square', 0.06); },

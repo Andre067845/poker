@@ -383,3 +383,37 @@ test('mostrar cartas voluntariamente y chat de la mesa', async (t) => {
   const r = await a.get(`/api/history/${sa.state.sessionId}`);
   assert.equal(r.data.session.hands[0].shown.length, 2);
 });
+
+test('respaldo externo: los datos sobreviven a un servidor sin disco', async () => {
+  const os = require('node:os');
+  const path = require('node:path');
+  const fs = require('node:fs');
+  const { restoreSnapshot } = require('../server/persist');
+  // almacenamiento falso que imita a Postgres
+  let stored = null; let saves = 0;
+  const store = { async load() { return stored; }, async save(b) { stored = Buffer.from(b); saves++; } };
+  const dir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'poker-a-'));
+  let inst = createApp({ dbFile: path.join(dir1, 'p.db'), store, backupMs: 50 });
+  let base = `http://127.0.0.1:${await inst.listen(0)}`;
+  const c = client(base);
+  let r = await c.post('/api/auth/register', { username: 'persistente', password: '12345678' });
+  const code = r.data.user.code;
+  await until(() => saves > 0, 3000, 'copia periódica');
+  await c.post('/api/tables', { name: 'Persistida', maxPlayers: 2, startingStack: 500, smallBlind: 1, bigBlind: 2, turnSeconds: 30, allowRebuy: false, maxBuyin: 500 });
+  await inst.close(); // copia final al apagarse
+  fs.rmSync(dir1, { recursive: true, force: true }); // el "disco" se pierde
+
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'poker-b-'));
+  const file2 = path.join(dir2, 'p.db');
+  assert.equal(await restoreSnapshot(store, file2), true);
+  inst = createApp({ dbFile: file2, store, backupMs: 50 });
+  base = `http://127.0.0.1:${await inst.listen(0)}`;
+  const c2 = client(base);
+  r = await c2.post('/api/auth/login', { username: 'persistente', password: '12345678' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.user.code, code, 'mismo código de jugador');
+  r = await c2.get('/api/tables');
+  assert.equal(r.data.tables[0].name, 'Persistida');
+  await inst.close();
+  fs.rmSync(dir2, { recursive: true, force: true });
+});

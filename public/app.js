@@ -596,6 +596,10 @@ function renderTable(code, opts = {}) {
   }
 
   socket.on('connect', () => { setConn('ok', 'Conectado'); join(); });
+  // Safari en iPhone corta la conexión cuando la app queda en segundo plano: al volver, reconectar.
+  const onVisible = () => { if (document.visibilityState === 'visible' && !socket.connected) socket.connect(); };
+  document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('pageshow', onVisible);
   socket.on('disconnect', () => setConn('warn', 'Reconectando…'));
   socket.io.on('reconnect_attempt', () => setConn('warn', 'Reconectando…'));
   socket.io.on('reconnect_failed', () => setConn('bad', 'Sin conexión'));
@@ -841,6 +845,8 @@ function renderTable(code, opts = {}) {
     });
   }
   timerInt = setInterval(tickTimers, 250);
+  // Mantiene despierto el servidor gratuito mientras alguien está en la mesa.
+  const keepAlive = setInterval(() => { fetch('/healthz', { cache: 'no-store' }).catch(() => {}); }, 4 * 60 * 1000);
 
   // ---------- panel inferior
   function drawPanel() {
@@ -1086,6 +1092,9 @@ function renderTable(code, opts = {}) {
 
   cleanup = () => {
     clearInterval(timerInt);
+    clearInterval(keepAlive);
+    document.removeEventListener('visibilitychange', onVisible);
+    window.removeEventListener('pageshow', onVisible);
     clearTimeout(bubbleTimer);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('beforeunload', beforeUnload);

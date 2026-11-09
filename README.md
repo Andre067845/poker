@@ -51,6 +51,7 @@ Abrí `http://localhost:3000`. Para jugar con amigos a distancia el servidor tie
 | `COOKIE_SECURE` | `1` para marcar la cookie como `Secure` (con HTTPS) | `0` |
 | `TRUST_PROXY` | `1` si corre detrás de un proxy/CDN que termina HTTPS | `0` |
 | `GRACE_SECONDS` | Período de gracia por desconexión antes de liberar el asiento | `180` |
+| `DATABASE_URL` | Postgres donde se respalda la base (para hostings sin disco, p. ej. Neon) | vacío |
 | `RESULT_DELAY_MS` | Pausa para ver el resultado (y poder mostrar cartas) antes de la siguiente mano | `8000` |
 
 **No hace falta ningún servicio externo.** Las cuentas solo piden nombre de usuario y contraseña (no se pide correo).
@@ -59,20 +60,29 @@ Abrí `http://localhost:3000`. Para jugar con amigos a distancia el servidor tie
 
 Al crear la cuenta se muestra **una sola vez** un código de recuperación (`XXXX-XXXX-XXXX-XXXX`) y el usuario debe confirmar que lo guardó. Con su usuario y ese código puede elegir una contraseña nueva desde "¿Olvidaste tu contraseña?"; en ese momento se cierran sus otras sesiones y se le entrega un código nuevo (el anterior deja de servir). Desde el lobby puede generar otro código ingresando su contraseña actual. Los códigos se guardan cifrados (scrypt), igual que las contraseñas. Si alguien pierde la contraseña y el código, la cuenta no se puede recuperar.
 
-## Publicarla en internet (Render, paso a paso)
+## Publicarla en internet GRATIS (Render + Neon)
 
-El repositorio incluye `render.yaml`, así que Render configura todo solo.
+Sin pagar nada y sin tarjeta: **Render** (plan Free) corre el servidor y **Neon** (plan Free) guarda una copia de la base de datos, porque el plan gratis de Render no tiene disco propio.
 
-1. Creá una cuenta en https://render.com (podés entrar con tu cuenta de GitHub).
-2. En el panel: **New → Blueprint**.
-3. Conectá GitHub y elegí el repositorio **andre067845/poker**. Si te pide rama, elegí aquella donde está este código (o primero uní la rama a `main`).
-4. Render lee `render.yaml` y muestra el servicio **poker-entre-amigos** con un disco de 1 GB. Tocá **Apply** / **Deploy Blueprint**.
-5. Esperá a que termine (unos minutos). Render te da una dirección como `https://poker-entre-amigos.onrender.com`.
-6. Abrila, creá tu cuenta, creá una mesa y compartí el enlace de invitación (`https://…onrender.com/m/CÓDIGO`). Cualquiera con el enlace crea su cuenta (usuario y contraseña) y entra directo a la mesa.
+**1. Base de datos gratis en Neon**
+1. Entrá a https://neon.tech y creá una cuenta (podés usar tu GitHub).
+2. Creá un proyecto (cualquier nombre, región cercana).
+3. En *Connection Details* copiá la **connection string**: se ve como `postgresql://usuario:clave@ep-xxxx.neon.tech/neondb?sslmode=require`. Es secreta: no la compartas.
 
-Costo: el plan **Starter** (≈ 7 USD/mes) es necesario porque incluye el **disco persistente** donde se guardan cuentas, mesas e historial. El plan gratuito no tiene disco: la app funcionaría, pero se borraría todo en cada reinicio y el servidor se "duerme" tras 15 minutos sin uso.
+**2. Servidor gratis en Render**
+1. Entrá a https://render.com y creá una cuenta con tu GitHub.
+2. **New → Blueprint** → elegí el repositorio **andre067845/poker** (y la rama donde está este código, o uní la rama a `main`).
+3. Render lee `render.yaml` (plan **Free**) y te pide `DATABASE_URL`: pegá la connection string de Neon.
+4. **Deploy Blueprint**. En unos minutos te da una dirección como `https://poker-entre-amigos.onrender.com`.
 
-Cada vez que se suben cambios a la rama conectada, Render vuelve a publicar solo (`autoDeploy`). Si querés un dominio propio, se agrega en *Settings → Custom Domains*.
+**3. Jugar**: abrí esa dirección en Safari (o cualquier navegador), creá tu cuenta, creá una mesa y compartí el enlace de invitación.
+
+Cómo funciona el respaldo: al arrancar, el servidor descarga la última copia desde Neon; mientras corre, sube una copia cada 15 segundos si hubo cambios, y otra al apagarse. Si el servidor se cayera de golpe se podrían perder como máximo los últimos segundos.
+
+Limitaciones del plan gratis de Render:
+- Si nadie usa la web durante 15 minutos, el servidor se "duerme". La primera visita después tarda **alrededor de 1 minuto** en cargar; después anda normal. Mientras haya alguien en una mesa, la página lo mantiene despierto.
+- Al dormirse se cortan las manos en curso (las cuentas, mesas e historial se conservan).
+- Render da 750 horas gratis por mes, suficiente para un servicio encendido todo el mes.
 
 ### Otras opciones
 

@@ -7,6 +7,7 @@ const { openDb } = require('./db');
 const { createAuth, UserError } = require('./auth');
 const { createHistory } = require('./history');
 const { TableManager } = require('./tables');
+const { startBackups } = require('./persist');
 
 const COOKIE = 'pk_sid';
 
@@ -200,14 +201,20 @@ function createApp(overrides = {}) {
   });
 
   tables.restoreAll();
+  const backups = config.store ? startBackups(db, config.store, { intervalMs: config.backupMs || 15000 }) : null;
 
   return {
     app, server, io, db, tables, config,
     listen(port = config.port) {
       return new Promise((resolve) => server.listen(port, () => resolve(server.address().port)));
     },
+    backups,
     async close() {
       tables.stop();
+      if (backups) {
+        backups.stop();
+        await backups.snapshot(true).catch((e) => console.error('Respaldo final fallido:', e.message));
+      }
       io.close();
       await new Promise((r) => server.close(() => r()));
       db.close();

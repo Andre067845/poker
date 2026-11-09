@@ -2,7 +2,7 @@
 
 Aplicación web para jugar **Texas Hold'em No Limit** en tiempo real con amigos, desde el celular o la computadora, entrando por un enlace de invitación. Interfaz en español, mesa 2D.
 
-> Se juega **exclusivamente con fichas virtuales gratuitas**: no tienen valor monetario, no se compran, no se canjean y no hay premios.
+> Todas las cantidades se muestran en **Bs**, pero son **Bs virtuales gratuitos** (fichas de juego): no son dinero real, no se compran, no se canjean y no hay premios.
 
 ## Arquitectura
 

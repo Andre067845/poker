@@ -6,7 +6,9 @@ const state = { user: null, mailConfigured: false };
 
 // ------------------------------------------------------------------ utilidades
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const fmt = (n) => Number(n || 0).toLocaleString('es-AR');
+const num = (n) => Number(n || 0).toLocaleString('es-AR');
+// Todas las cantidades del juego se muestran en Bs (virtuales, sin valor real).
+const fmt = (n) => `Bs\u00a0${num(n)}`;
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n));
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const dtFmt = new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeStyle: 'short' });
@@ -186,7 +188,7 @@ function renderAuth(mode = 'login') {
       </div>
       <div id="auth-form"></div>
     </div>
-    <p class="disclaimer">Se juega solo con fichas virtuales gratuitas: no tienen valor monetario, no se compran, no se canjean y no hay premios.</p>
+    <p class="disclaimer">Se juega solo con Bs virtuales gratuitos (fichas de juego): no son dinero real, no se compran, no se canjean y no hay premios.</p>
   </div></div>`;
   document.getElementById('tab-login').addEventListener('click', () => renderAuth('login'));
   document.getElementById('tab-register').addEventListener('click', () => renderAuth('register'));
@@ -362,7 +364,7 @@ function renderCreate() {
   shell('lobby', `
     <section class="card-panel" style="max-width:640px;margin:0 auto">
       <h1>Crear mesa</h1>
-      <p class="muted small">Texas Hold'em No Limit con small blind y big blind obligatorias. Solo fichas virtuales gratuitas.</p>
+      <p class="muted small">Texas Hold'em No Limit con small blind y big blind obligatorias. Solo Bs virtuales gratuitos, sin valor real.</p>
       <form id="cf" novalidate>
         <label for="name">Nombre de la mesa</label>
         <input id="name" name="name" type="text" maxlength="40" value="Mesa de ${esc(state.user.username)}" required>
@@ -376,14 +378,14 @@ function renderCreate() {
           <div><label for="bigBlind">Big blind</label>
             <input id="bigBlind" name="bigBlind" type="number" min="1" value="10" inputmode="numeric">
             <div class="hint">Sugerencia: el doble de la small blind.</div></div>
-          <div><label for="startingStack">Entrada inicial (fichas)</label>
+          <div><label for="startingStack">Entrada inicial (Bs)</label>
             <input id="startingStack" name="startingStack" type="number" min="1" value="1000" inputmode="numeric">
             <div class="hint" id="stack-hint"></div></div>
           <div><label for="maxBuyin">Importe máximo por jugador al entrar</label>
             <input id="maxBuyin" name="maxBuyin" type="number" min="1" value="2000" inputmode="numeric">
-            <div class="hint">También es el tope de fichas al recargar.</div></div>
+            <div class="hint">También es el tope de Bs al recargar.</div></div>
         </div>
-        <label class="check"><input type="checkbox" name="allowRebuy" id="allowRebuy" checked> Permitir recargas de fichas (solo entre manos)</label>
+        <label class="check"><input type="checkbox" name="allowRebuy" id="allowRebuy" checked> Permitir recargas de Bs (solo entre manos)</label>
         <div id="err"></div>
         <div class="row" style="margin-top:1em"><a class="btn ghost" href="/" data-link>Cancelar</a><span class="spacer"></span><button class="btn primary">Crear mesa</button></div>
       </form>
@@ -466,7 +468,7 @@ async function renderJoin(code) {
       <dl class="info-list">
         <dt>Jugadores dentro</dt><dd>${t.players.length ? t.players.map((p) => `${esc(p.username)} <span class="muted small">(${fmt(p.stack)})</span>`).join(', ') : 'Nadie todavía'}</dd>
         <dt>Asientos disponibles</dt><dd>${t.freeSeats} de ${t.maxPlayers}</dd>
-        <dt>Entrada inicial</dt><dd>${fmt(t.startingStack)} fichas</dd>
+        <dt>Entrada inicial</dt><dd>${fmt(t.startingStack)}</dd>
         <dt>Ciegas</dt><dd>Small ${fmt(t.smallBlind)} · Big ${fmt(t.bigBlind)}</dd>
         <dt>Tiempo por turno</dt><dd>${t.turnSeconds} s</dd>
         <dt>Partida</dt><dd>${t.gameStarted ? (t.handInProgress ? 'Ya comenzó (hay una mano en curso: vas a recibir cartas en la siguiente)' : 'Ya comenzó') : 'Todavía no comenzó'}</dd>
@@ -474,9 +476,9 @@ async function renderJoin(code) {
       </dl>
       ${full ? '<div class="form-error">La mesa está completa. Podés entrar a mirar y sentarte cuando se libere un lugar.</div>' : `
       <form id="sf" novalidate>
-        <label for="amount">¿Con cuántas fichas querés entrar?</label>
+        <label for="amount">¿Con cuántos Bs querés entrar?</label>
         <input id="amount" type="number" inputmode="numeric" min="${t.minBuyin}" max="${t.maxBuyin}" value="${t.startingStack}">
-        <div class="hint">Mínimo ${fmt(t.minBuyin)} · máximo ${fmt(t.maxBuyin)} fichas virtuales.</div>
+        <div class="hint">Mínimo ${fmt(t.minBuyin)} · máximo ${fmt(t.maxBuyin)} (virtuales).</div>
         <div id="err"></div>
         <div class="row" style="margin-top:1em"><a class="btn ghost" href="/" data-link>Cancelar</a><span class="spacer"></span>
           <button class="btn primary">Entrar a la mesa</button></div>
@@ -663,7 +665,7 @@ function renderTable(code, opts = {}) {
     } else {
       const seated = st.seats.filter(Boolean).length;
       const ready = st.seats.filter((s) => s && s.ready).length;
-      center += `<div class="status-line">${st.gameStarted ? 'Esperando que haya al menos dos jugadores con fichas…'
+      center += `<div class="status-line">${st.gameStarted ? 'Esperando que haya al menos dos jugadores con Bs…'
         : `Esperando para empezar · ${seated} sentados · ${ready} listos`}</div>`;
     }
     html += `<div class="center">${center}</div>`;
@@ -694,7 +696,7 @@ function renderTable(code, opts = {}) {
       if (s.waiting) sub = 'Espera la próxima mano';
       else if (!h && winSeats.has(i)) { const w = lr.winners.find((x) => x.seat === i); sub = `Ganó ${fmt(w.amount)}`; subCls = 'hl'; }
       else if (!h && !st.gameStarted) sub = s.ready ? '✓ Listo' : 'No está listo';
-      else if (!h && s.stack === 0) sub = 'Sin fichas';
+      else if (!h && s.stack === 0) sub = 'Sin Bs';
       if (s.leaving) sub = 'Se va al terminar la mano';
       let timer = '';
       if (isTurn && h.deadline) {
@@ -834,7 +836,7 @@ function renderTable(code, opts = {}) {
     }
 
     const myCards = me.cards ? me.cards.map((c) => cardHtml(c)).join('') : '';
-    let info = `<div class="big">${fmt(me.stack)} fichas</div>`;
+    let info = `<div class="big">${fmt(me.stack)}</div>`;
     if (h && me.waiting) info += '<div class="muted small">Vas a recibir cartas en la próxima mano.</div>';
     else if (h && me.folded) info += '<div class="muted small">Te retiraste de esta mano.</div>';
     else if (h && !L) {
@@ -936,7 +938,7 @@ function renderTable(code, opts = {}) {
   function sitModal(seat) {
     const t = st.table;
     modal(`<h2>Sentarse a la mesa</h2>
-      <form id="smf"><label for="sm-amt">¿Con cuántas fichas querés entrar?</label>
+      <form id="smf"><label for="sm-amt">¿Con cuántos Bs querés entrar?</label>
       <input id="sm-amt" type="number" inputmode="numeric" min="${t.minBuyin}" max="${t.maxBuyin}" value="${t.startingStack}">
       <div class="hint">Mínimo ${fmt(t.minBuyin)} · máximo ${fmt(t.maxBuyin)}. ${st.hand ? 'Hay una mano en curso: vas a jugar desde la siguiente.' : ''}</div>
       <div id="sm-err"></div>
@@ -957,9 +959,9 @@ function renderTable(code, opts = {}) {
     const t = st.table;
     const me = st.seats[st.mySeat];
     const room = t.maxBuyin - me.stack - me.pendingRebuy;
-    modal(`<h2>Recargar fichas</h2>
-      <p class="muted small">Las recargas se aplican entre manos. Tope por jugador: ${fmt(t.maxBuyin)} fichas.</p>
-      <form id="rf"><label for="r-amt">¿Cuántas fichas querés agregar?</label>
+    modal(`<h2>Recargar Bs</h2>
+      <p class="muted small">Las recargas se aplican entre manos. Tope por jugador: ${fmt(t.maxBuyin)}.</p>
+      <form id="rf"><label for="r-amt">¿Cuántos Bs querés agregar?</label>
       <input id="r-amt" type="number" inputmode="numeric" min="1" max="${room}" value="${Math.min(room, t.startingStack)}">
       <div class="hint">Podés agregar hasta ${fmt(room)}.</div><div id="r-err"></div>
       <div class="row"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary">Recargar</button></div></form>`,
@@ -978,7 +980,7 @@ function renderTable(code, opts = {}) {
   async function leaveTable() {
     const inHand = st.hand && st.seats[st.mySeat] && st.seats[st.mySeat].hasCards;
     const ok = await confirmDialog('¿Abandonar la mesa?',
-      `${inHand ? 'Estás jugando una mano: si te vas, te retirás de ella. ' : ''}Te vas a levantar con ${fmt(st.seats[st.mySeat].stack)} fichas, que quedan registradas en el historial.`,
+      `${inHand ? 'Estás jugando una mano: si te vas, te retirás de ella. ' : ''}Te vas a levantar con ${fmt(st.seats[st.mySeat].stack)}, que quedan registrados en el historial.`,
       'Abandonar la mesa');
     if (!ok) return;
     const r = await call('table:leave');
@@ -990,7 +992,7 @@ function renderTable(code, opts = {}) {
   document.getElementById('to-lobby').addEventListener('click', async () => {
     if (st && st.mySeat != null && !closedByOwner) {
       const ok = await confirmDialog('¿Volver al lobby?',
-        'Vas a seguir sentado con tus fichas. Si estás en una mano y se vence tu turno, se pasará o te retirará automáticamente. Si no volvés en unos minutos se libera tu asiento.',
+        'Vas a seguir sentado con tus Bs. Si estás en una mano y se vence tu turno, se pasará o te retirará automáticamente. Si no volvés en unos minutos se libera tu asiento.',
         'Ir al lobby', false);
       if (!ok) return;
     }
@@ -1032,7 +1034,7 @@ function renderTable(code, opts = {}) {
       const cl = m.querySelector('#m-close');
       cl && cl.addEventListener('click', async () => {
         close();
-        const ok = await confirmDialog('¿Cerrar la mesa?', 'La sesión termina para todos. Las fichas que queden en la mesa se registran como “restantes” en el historial.', 'Cerrar mesa');
+        const ok = await confirmDialog('¿Cerrar la mesa?', 'La sesión termina para todos. Los Bs que queden en la mesa se registran como “restantes” en el historial.', 'Cerrar mesa');
         if (!ok) return;
         const r = await call('table:close');
         if (!r.ok) toast(r.error, 'err');
@@ -1065,7 +1067,7 @@ async function renderHistory() {
     if (!box) return;
     if (!sessions.length) {
       box.innerHTML = `<div class="card-panel empty"><div class="big">📜</div><h3>Todavía no jugaste ninguna sesión</h3>
-        <p class="muted">Cuando te sientes en una mesa, la sesión aparecerá acá con todos los movimientos de fichas.</p>
+        <p class="muted">Cuando te sientes en una mesa, la sesión aparecerá acá con todos los movimientos de Bs.</p>
         <a class="btn primary" href="/crear" data-link>Crear una mesa</a></div>`;
       return;
     }
@@ -1102,10 +1104,10 @@ async function renderSession(id) {
       <dt>Ciegas</dt><dd>${fmt(s.smallBlind)} / ${fmt(s.bigBlind)}</dd>
       <dt>Zona horaria</dt><dd>${esc(tz)}</dd>
     </dl></div>
-    <h2 style="margin-top:1.2em">Fichas por jugador</h2>
-    ${live ? '<p class="muted small">La sesión sigue abierta: las fichas restantes son las de la última mano terminada.</p>' : ''}
+    <h2 style="margin-top:1.2em">Bs por jugador</h2>
+    ${live ? '<p class="muted small">La sesión sigue abierta: los Bs restantes son los de la última mano terminada.</p>' : ''}
     <div class="tablewrap"><table class="data"><thead><tr>
-      <th>Jugador</th><th>Código</th><th class="num">Fichas iniciales</th><th>Recargas (hora)</th><th class="num">Total cargado</th>
+      <th>Jugador</th><th>Código</th><th class="num">Bs iniciales</th><th>Recargas (hora)</th><th class="num">Total cargado</th>
       <th class="num">Retiradas</th><th class="num">Restantes</th><th class="num">Balance neto</th></tr></thead><tbody>
       ${s.players.map((p) => `<tr>
         <td><b>${esc(p.username)}</b>${p.seated ? ' <span class="badge live">en la mesa</span>' : ''}</td>
@@ -1118,11 +1120,11 @@ async function renderSession(id) {
         <td class="num ${p.balance > 0 ? 'pos' : p.balance < 0 ? 'neg' : ''}"><b>${signed(p.balance)}</b></td></tr>`).join('')}
       <tr><td colspan="4"><b>Total</b></td><td class="num">${fmt(totals.loaded)}</td><td class="num">${fmt(totals.w)}</td><td class="num">${fmt(totals.r)}</td><td class="num"><b>${signed(totals.b)}</b></td></tr>
       </tbody></table></div>
-    <p class="muted small">Balance = fichas retiradas + fichas restantes − total de fichas cargadas. Son fichas virtuales sin valor monetario.</p>
+    <p class="muted small">Balance = Bs retirados + Bs restantes − total de Bs cargados. Son Bs virtuales sin valor real.</p>
     <h2 style="margin-top:1.2em">Manos jugadas (${s.hands.length})</h2>
     <div class="card-panel">${s.hands.length ? s.hands.slice().reverse().map((h) => `
       <div class="hand-row"><div><b>Mano #${h.number}</b> <span class="muted small">· ${fmtTime(h.startedAt)}${h.endedAt ? ` – ${fmtTime(h.endedAt)}` : ' · en curso'}</span></div>
-      ${h.voided ? '<div class="muted small">Mano anulada (reinicio del servidor). Las fichas volvieron a sus dueños.</div>' : `
+      ${h.voided ? '<div class="muted small">Mano anulada (reinicio del servidor). Los Bs volvieron a sus dueños.</div>' : `
       <div class="small">${h.winners.map((w) => `🏆 ${esc(w.username)} +${fmt(w.amount)}${w.handName ? ` con ${esc(w.handName)}` : ''}`).join(' · ') || '—'}</div>
       ${h.board.length ? `<div class="small">Mesa: ${miniCards(h.board)}</div>` : ''}
       ${h.shown && h.shown.length ? `<div class="small muted">Mostró voluntariamente: ${h.shown.map((x) => `${esc(x.username)} ${miniCards(x.cards)}`).join(' · ')}</div>` : ''}
@@ -1138,7 +1140,7 @@ function rulesHtml() {
   <ul>
     <li><b>Ciegas:</b> antes de repartir, los dos jugadores a la izquierda del botón (D) ponen la small blind y la big blind. Con dos jugadores, el botón pone la small blind y habla primero antes del flop.</li>
     <li><b>Rondas:</b> preflop, flop, turn y river. En cada una podés <b>pasar</b> (si no hay apuesta), <b>igualar</b>, <b>apostar/subir</b> o <b>retirarte</b>.</li>
-    <li><b>No Limit:</b> podés apostar todas tus fichas (all-in). La subida mínima es igual a la última subida (o a la big blind).</li>
+    <li><b>No Limit:</b> podés apostar todos tus Bs (all-in). La subida mínima es igual a la última subida (o a la big blind).</li>
     <li><b>All-in y botes secundarios:</b> si alguien va all-in por menos, solo puede ganar lo que igualó; el resto se juega en un bote secundario.</li>
     <li><b>Empates:</b> el bote se reparte. El palo nunca desempata.</li>
   </ul>
@@ -1155,7 +1157,7 @@ function rulesHtml() {
     <div class="rank-item"><span class="n">9</span><div><b>Pareja</b> ${ex(['Ts', 'Th', 'Ad', '8c', '3s'])}</div></div>
     <div class="rank-item"><span class="n">10</span><div><b>Carta alta</b> ${ex(['Ah', 'Qd', '9s', '6c', '3h'])}</div></div>
   </div>
-  <p class="muted small" style="margin-top:1em">Si se te vence el tiempo, el sistema pasa por vos si es posible; si no, te retira de la mano. Las fichas son virtuales y gratuitas: no tienen valor monetario.</p>`;
+  <p class="muted small" style="margin-top:1em">Si se te vence el tiempo, el sistema pasa por vos si es posible; si no, te retira de la mano. Los Bs son virtuales y gratuitos: no tienen valor monetario.</p>`;
 }
 
 function renderRules() {

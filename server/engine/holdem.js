@@ -195,8 +195,8 @@ class Hand {
           if (type === 'raise' && !L.canRaise) throw new GameError('No podés subir ahora');
           to = Number(action.amount);
           if (!Number.isInteger(to)) throw new GameError('Importe inválido');
-          if (to > L.maxTo) throw new GameError(`No tenés fichas suficientes (máximo ${L.maxTo})`);
-          if (to < L.minTo) throw new GameError(`El mínimo es ${L.minTo}`);
+          if (to > L.maxTo) throw new GameError(`No tenés Bs suficientes (máximo Bs ${L.maxTo})`);
+          if (to < L.minTo) throw new GameError(`El mínimo es Bs ${L.minTo}`);
         }
         if (to <= this.currentBet) {
           // All-in que no alcanza (o iguala) la apuesta actual: es un call.

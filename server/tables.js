@@ -35,9 +35,9 @@ function validateTableSettings(input) {
   if (s.max_players < LIMITS.minPlayers || s.max_players > LIMITS.maxPlayers) throw new UserError('La cantidad de jugadores debe estar entre 2 y 9');
   if (s.small_blind < 1) throw new UserError('La small blind debe ser al menos 1');
   if (s.big_blind < s.small_blind) throw new UserError('La big blind no puede ser menor que la small blind (lo habitual es el doble)');
-  if (s.starting_stack < s.big_blind * 10) throw new UserError(`La entrada inicial debe ser al menos 10 big blinds (${s.big_blind * 10})`);
+  if (s.starting_stack < s.big_blind * 10) throw new UserError(`La entrada inicial debe ser al menos 10 big blinds (Bs ${s.big_blind * 10})`);
   if (s.max_buyin < s.starting_stack) throw new UserError('El importe máximo de entrada no puede ser menor que la entrada inicial');
-  if (s.max_buyin > LIMITS.maxChips) throw new UserError(`El importe máximo no puede superar ${LIMITS.maxChips.toLocaleString('es')}`);
+  if (s.max_buyin > LIMITS.maxChips) throw new UserError(`El importe máximo no puede superar Bs ${LIMITS.maxChips.toLocaleString('es')}`);
   if (s.turn_seconds < LIMITS.minTurn || s.turn_seconds > LIMITS.maxTurn) throw new UserError('El tiempo por turno debe estar entre 10 y 300 segundos');
   return s;
 }
@@ -190,7 +190,7 @@ class Room {
     amount = Number(amount);
     const min = minBuyinFor(this.t);
     if (!Number.isInteger(amount) || amount < min || amount > this.t.max_buyin) {
-      throw new UserError(`El importe debe ser un número entero entre ${min} y ${this.t.max_buyin}`);
+      throw new UserError(`El importe debe ser un número entero entre Bs ${min} y Bs ${this.t.max_buyin}`);
     }
     let idx = Number.isInteger(seat) && seat >= 0 && seat < this.seats.length && !this.seats[seat] ? seat : this.seats.findIndex((s) => !s);
     if (idx < 0) throw new UserError('La mesa está completa');
@@ -256,7 +256,7 @@ class Room {
     const pending = seat.pendingRebuys.reduce((s, r) => s + r.amount, 0);
     const room = this.t.max_buyin - seat.stack - pending;
     if (!Number.isInteger(amount) || amount < 1) throw new UserError('El importe de la recarga debe ser un número entero positivo');
-    if (amount > room) throw new UserError(room > 0 ? `Podés recargar como máximo ${room} fichas (tope por jugador: ${this.t.max_buyin})` : `Ya tenés el máximo permitido (${this.t.max_buyin})`);
+    if (amount > room) throw new UserError(room > 0 ? `Podés recargar como máximo Bs ${room} (tope por jugador: Bs ${this.t.max_buyin})` : `Ya tenés el máximo permitido (Bs ${this.t.max_buyin})`);
     seat.pendingRebuys.push({ amount, key });
     if (!this.hand || this.hand.finished) this._applyPendingRebuys();
     this.broadcast();

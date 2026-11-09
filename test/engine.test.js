@@ -130,7 +130,7 @@ test('subida mínima: debe ser al menos la última subida completa', () => {
   L = h.legalActions(1);
   assert.equal(L.toCall, 35);
   assert.equal(L.minTo, 70, 'la próxima subida mínima es a 70 (40 + 30)');
-  assert.throws(() => h.act(1, { type: 'raise', amount: 60 }), /mínimo es 70/);
+  assert.throws(() => h.act(1, { type: 'raise', amount: 60 }), /mínimo es Bs 70/);
   h.act(1, { type: 'raise', amount: 70 });
   assert.equal(h.legalActions(2).minTo, 100);
   // postflop la apuesta mínima es la ciega grande

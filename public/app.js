@@ -505,6 +505,7 @@ function renderTable(code, opts = {}) {
       <button class="btn small ghost" id="to-lobby" title="Volver al lobby">← Lobby</button>
       <div class="title" id="t-title">Mesa ${esc(code)}</div>
       <span class="conn warn" id="conn">Conectando…</span>
+      <button class="icon-btn chat-btn" id="t-chat" title="Chat" aria-label="Abrir chat">💬<span class="badge-n hidden" id="chat-badge">0</span></button>
       <button class="icon-btn" id="t-invite" title="Copiar invitación">🔗</button>
       <button class="icon-btn wide-only" id="t-rules" title="Reglas y combinaciones">?</button>
       <button class="icon-btn wide-only" id="t-sound" title="Sonido">${sounds.enabled ? '🔊' : '🔇'}</button>
@@ -512,6 +513,13 @@ function renderTable(code, opts = {}) {
     </div>
     <div class="table-stage"><div class="table-area" id="area"><div class="felt"></div></div></div>
     <div class="action-panel" id="panel"></div>
+    <aside class="chat-drawer hidden" id="chat" aria-label="Chat de la mesa">
+      <div class="chat-head"><b>Chat de la mesa</b><span class="spacer"></span><button class="icon-btn" id="chat-close" aria-label="Cerrar chat">✕</button></div>
+      <div class="chat-list" id="chat-list"><p class="muted small chat-empty">Todavía no hay mensajes. ¡Saludá a la mesa!</p></div>
+      <div class="chat-quick" id="chat-quick"></div>
+      <form class="chat-form" id="chat-form"><input type="text" id="chat-input" maxlength="200" placeholder="Escribí un mensaje…" autocomplete="off" aria-label="Mensaje">
+        <button class="btn primary">Enviar</button></form>
+    </aside>
   </div>`;
 
   const socket = window.io({ transports: ['websocket', 'polling'], reconnectionDelayMax: 4000 });
@@ -523,6 +531,11 @@ function renderTable(code, opts = {}) {
   let lastTurnSeat = null;
   let timerInt = null;
   let closedByOwner = false;
+  let chatOpen = false;
+  let unread = 0;
+  const chatIds = new Set();
+  const bubbles = new Map(); // seat -> { text, until }
+  let bubbleTimer = null;
   const conn = document.getElementById('conn');
   const setConn = (cls, txt) => { conn.className = `conn ${cls}`; conn.textContent = txt; };
 
@@ -539,6 +552,8 @@ function renderTable(code, opts = {}) {
       return;
     }
     applyState(r.state);
+    if (r.quickChat) renderQuick(r.quickChat);
+    (r.chat || []).forEach((m) => addChat(m, true));
     if (pendingSit && r.state.mySeat == null) {
       const s = await call('table:sit', pendingSit);
       if (!s.ok) toast(s.error, 'err'); else { toast('¡Te sentaste! Marcá “Estoy listo” cuando quieras jugar.', 'ok'); sounds.play('chips'); }
@@ -555,11 +570,13 @@ function renderTable(code, opts = {}) {
     setConn('bad', 'Sin conexión — reintentando');
   });
   socket.on('table:state', applyState);
+  socket.on('table:chat', (m) => addChat(m, false));
   socket.on('table:closed', (m) => { closedByOwner = true; toast(m.message, 'err'); });
   socket.on('table:event', (ev) => {
     if (ev.kind === 'deal') sounds.play('deal');
     else if (ev.kind === 'action') sounds.play(ev.type === 'fold' ? 'fold' : ev.type === 'check' ? 'check' : 'chips');
     else if (ev.kind === 'win') sounds.play('win');
+    else if (ev.kind === 'show') { sounds.play('deal'); if (st && ev.seat !== st.mySeat) toast(`${ev.username} mostró sus cartas`); }
     else if (ev.kind === 'standup' && st && ev.reason === 'disconnect') toast(`${ev.username} perdió la conexión y dejó la mesa`);
   });
 
@@ -640,6 +657,7 @@ function renderTable(code, opts = {}) {
     } else if (lr) {
       const parts = lr.winners.map((w) => `${esc(w.username)} gana ${fmt(w.amount)}${w.handName ? ` con ${esc(w.handName)}` : ''}`);
       center += `<div class="result-banner">🏆 ${parts.join(' · ')}</div>`;
+      if (lr.shown && lr.shown.length) center += `<div class="status-line">👁 ${lr.shown.map((x) => `${esc(x.username)} mostró ${miniCards(x.cards)}`).join(' · ')}</div>`;
       if (lr.pots.length > 1) center += `<div class="pots">${lr.pots.map((p, i) => `<span class="pot">${i === 0 ? 'Principal' : `Secundario ${i}`}: ${fmt(p.amount)} → ${p.winners.map((w) => esc(w.username)).join(', ')}</span>`).join('')}</div>`;
       center += `<div class="status-line">${st.gameStarted ? 'La próxima mano empieza en unos segundos…' : ''}</div>`;
     } else {
@@ -684,7 +702,10 @@ function renderTable(code, opts = {}) {
         const left = Math.max(0, h.deadline - now);
         timer = `<div class="timer ${left < 5000 ? 'low' : ''}" data-deadline="${h.deadline}" data-total="${total}"><i style="width:${(left / total) * 100}%"></i></div><div class="timer-num" data-deadline-num="${h.deadline}">${Math.ceil(left / 1000)} s</div>`;
       }
+      const bub = bubbles.get(i);
+      const bubble = bub && bub.until > Date.now() ? `<div class="bubble">${esc(bub.text)}</div>` : '';
       html += `<div class="${cls}" style="left:${p.x}%;top:${p.y}%">
+        ${bubble}
         ${cards}
         <div class="seat-box">
           <div class="markers">${marks}</div>
@@ -704,6 +725,74 @@ function renderTable(code, opts = {}) {
     area.innerHTML = html;
     area.querySelectorAll('[data-sit]').forEach((b) => b.addEventListener('click', () => sitModal(Number(b.dataset.sit))));
   }
+
+  // ---------- chat
+  function renderQuick(list) {
+    const box = document.getElementById('chat-quick');
+    if (!box) return;
+    box.innerHTML = list.map((t, i) => `<button type="button" class="btn small" data-quick="${i}">${esc(t)}</button>`).join('');
+    box.querySelectorAll('[data-quick]').forEach((b) => b.addEventListener('click', () => sendChat({ quick: Number(b.dataset.quick) })));
+  }
+
+  async function sendChat(payload) {
+    const r = await call('table:chat', payload);
+    if (!r.ok) { toast(r.error, 'err'); return false; }
+    return true;
+  }
+
+  function addChat(m, fromHistory) {
+    if (chatIds.has(m.id)) return;
+    chatIds.add(m.id);
+    const list = document.getElementById('chat-list');
+    if (!list) return;
+    const empty = list.querySelector('.chat-empty');
+    if (empty) empty.remove();
+    const mine = state.user && m.userId === state.user.id;
+    const el = document.createElement('div');
+    el.className = `chat-msg ${mine ? 'mine' : ''} ${m.quick ? 'quick' : ''}`;
+    el.innerHTML = `<span class="who">${esc(m.username)}</span> <span class="when">${fmtTime(new Date(m.at).toISOString()).slice(0, 5)}</span><div class="txt">${esc(m.text)}</div>`;
+    list.appendChild(el);
+    while (list.children.length > 80) list.firstElementChild.remove();
+    list.scrollTop = list.scrollHeight;
+    if (fromHistory) return;
+    if (m.seat != null) {
+      bubbles.set(m.seat, { text: m.text, until: Date.now() + 4500 });
+      drawTable();
+      clearTimeout(bubbleTimer);
+      bubbleTimer = setTimeout(() => drawTable(), 4600);
+    }
+    if (!mine) {
+      sounds.play('chat');
+      if (!chatOpen) { unread++; updateBadge(); }
+    }
+  }
+
+  function updateBadge() {
+    const b = document.getElementById('chat-badge');
+    if (!b) return;
+    b.textContent = unread > 9 ? '9+' : String(unread);
+    b.classList.toggle('hidden', unread === 0);
+  }
+
+  function setChatOpen(open) {
+    chatOpen = open;
+    document.getElementById('chat').classList.toggle('hidden', !open);
+    if (open) {
+      unread = 0; updateBadge();
+      const list = document.getElementById('chat-list');
+      list.scrollTop = list.scrollHeight;
+      if (!window.matchMedia('(max-width: 700px)').matches) document.getElementById('chat-input').focus();
+    }
+  }
+  document.getElementById('t-chat').addEventListener('click', () => setChatOpen(!chatOpen));
+  document.getElementById('chat-close').addEventListener('click', () => setChatOpen(false));
+  document.getElementById('chat-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const inp = document.getElementById('chat-input');
+    const text = inp.value.trim();
+    if (!text) return;
+    if (await sendChat({ text })) inp.value = '';
+  });
 
   function tickTimers() {
     const now = Date.now() + clockOffset;
@@ -727,7 +816,7 @@ function renderTable(code, opts = {}) {
     const me = st.mySeat != null ? st.seats[st.mySeat] : null;
     const L = h && me && h.turnSeat === st.mySeat ? h.legal : null;
     const key = JSON.stringify([st.mySeat, h && h.number, h && h.turnId, !!L, me && me.cards, me && me.stack, me && me.ready,
-      st.gameStarted, st.canStart, me && me.pendingRebuy, st.table.status, h && h.turnSeat, me && me.leaving, me && me.folded]);
+      st.gameStarted, st.canStart, me && me.pendingRebuy, st.table.status, h && h.turnSeat, me && me.leaving, me && me.folded, st.canShowCards]);
     if (key === actionKey) return;
     actionKey = key;
 
@@ -752,6 +841,7 @@ function renderTable(code, opts = {}) {
       const ts = st.seats[h.turnSeat];
       info += `<div class="muted small">Turno de ${esc(ts ? ts.username : '—')}…</div>`;
     }
+    if (st.canShowCards) info += '<button class="btn small blue show-btn" id="p-show">👁 Mostrar mis cartas</button>';
     let html = `<div class="my-row"><div class="my-cards">${myCards}</div><div class="my-info">${info}</div>
       <div class="row">${extraButtons(me)}</div></div>`;
 
@@ -805,6 +895,10 @@ function renderTable(code, opts = {}) {
       if (!r.ok) toast(r.error, 'err');
     });
     q('p-rebuy') && q('p-rebuy').addEventListener('click', rebuyModal);
+    q('p-show') && q('p-show').addEventListener('click', async () => {
+      const r = await call('table:show');
+      if (!r.ok) toast(r.error, 'err');
+    });
     q('p-leave') && q('p-leave').addEventListener('click', leaveTable);
 
     const range = q('amt-range'); const num = q('amt'); const agg = q('agg-btn');
@@ -954,6 +1048,7 @@ function renderTable(code, opts = {}) {
 
   cleanup = () => {
     clearInterval(timerInt);
+    clearTimeout(bubbleTimer);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('beforeunload', beforeUnload);
     socket.emit('table:exit');
@@ -1030,6 +1125,7 @@ async function renderSession(id) {
       ${h.voided ? '<div class="muted small">Mano anulada (reinicio del servidor). Las fichas volvieron a sus dueños.</div>' : `
       <div class="small">${h.winners.map((w) => `🏆 ${esc(w.username)} +${fmt(w.amount)}${w.handName ? ` con ${esc(w.handName)}` : ''}`).join(' · ') || '—'}</div>
       ${h.board.length ? `<div class="small">Mesa: ${miniCards(h.board)}</div>` : ''}
+      ${h.shown && h.shown.length ? `<div class="small muted">Mostró voluntariamente: ${h.shown.map((x) => `${esc(x.username)} ${miniCards(x.cards)}`).join(' · ')}</div>` : ''}
       ${h.showdown.length ? `<div class="small muted">Showdown: ${h.showdown.map((x) => `${esc(x.username)} ${miniCards(x.cards)} (${esc(x.handName)})`).join(' · ')}</div>` : ''}`}
       </div>`).join('') : '<p class="muted">No se jugaron manos en esta sesión.</p>'}</div>`);
 }

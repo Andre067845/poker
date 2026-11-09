@@ -44,7 +44,7 @@ function defaultConfig(overrides = {}) {
     cookieSecure: env.COOKIE_SECURE === '1',
     trustProxy: env.TRUST_PROXY === '1',
     graceMs: Number(env.GRACE_SECONDS || 180) * 1000,
-    resultDelayMs: Number(env.RESULT_DELAY_MS || 6000),
+    resultDelayMs: Number(env.RESULT_DELAY_MS || 8000),
     sweepMs: 5000,
     exposeResetLinks: env.EXPOSE_RESET_LINKS === '1',
     ...overrides,
@@ -199,7 +199,7 @@ function createApp(overrides = {}) {
       if (room && room !== r) room.detachSocket(socket, user.id);
       room = r;
       r.attachSocket(socket, user);
-      return { state: r.view(user.id) };
+      return { state: r.view(user.id), chat: r.chat, quickChat: TableManager.QUICK_CHAT };
     }));
     socket.on('table:sit', handler((p) => { needRoom().sit(user, p); }));
     socket.on('table:ready', handler((p) => { needRoom().setReady(user, p.ready); }));
@@ -208,6 +208,8 @@ function createApp(overrides = {}) {
     socket.on('table:rebuy', handler((p) => { needRoom().rebuy(user, p); }));
     socket.on('table:leave', handler(() => { needRoom().leave(user); }));
     socket.on('table:close', handler(() => { needRoom().close(user); }));
+    socket.on('table:show', handler(() => { needRoom().showCards(user); }));
+    socket.on('table:chat', handler((p) => ({ message: needRoom().sendChat(user, p) })));
     socket.on('table:exit', handler(() => { if (room) { room.detachSocket(socket, user.id); room = null; } }));
     socket.on('disconnect', () => { if (room) room.detachSocket(socket, user.id); });
   });

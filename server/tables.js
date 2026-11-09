@@ -72,6 +72,8 @@ class Room {
     this.nextHandTimer = null;
     this.processedActions = new Set();
     this.closing = false;
+    this.chat = []; // últimos mensajes (en memoria)
+    this.chatTimes = new Map(); // userId -> marcas de tiempo recientes (anti-spam)
     this._restore();
   }
 
@@ -431,6 +433,7 @@ class Room {
       pots: res.pots.map((p) => ({ amount: p.amount, winners: p.winners.map((w) => ({ ...w, username: name(w.seat) })) })),
       showdown: res.showdown.map((s) => ({ seat: s.seat, cards: s.cards, handName: s.handName, bestCards: s.bestCards, username: name(s.seat) })),
       uncalled: res.uncalled,
+      shown: [],
       at: Date.now(),
     };
     const summary = {
@@ -460,6 +463,49 @@ class Room {
   }
 
   // ------------------------------------------------------------------ vistas
+  /** Tras terminar la mano, un jugador puede mostrar voluntariamente sus cartas. */
+  showCards(user) {
+    if (this.hand && !this.hand.finished) throw new UserError('Solo podés mostrar tus cartas cuando termina la mano');
+    const si = this.seatOf(user.id);
+    if (!this.lastResult || si < 0 || !this.lastHoles || !this.lastHoles.has(user.id)) throw new UserError('No tenés cartas para mostrar');
+    const lr = this.lastResult;
+    if (lr.showdown.some((x) => x.seat === si) || lr.shown.some((x) => x.seat === si)) return;
+    const cards = this.lastHoles.get(user.id);
+    lr.shown.push({ seat: si, cards, username: this.seats[si].username });
+    const row = this.db.prepare('SELECT summary FROM hands WHERE id = ?').get(this.handRowId);
+    if (row && row.summary) {
+      const sum = JSON.parse(row.summary);
+      sum.shown = (sum.shown || []).concat([{ userId: user.id, username: this.seats[si].username, cards }]);
+      this.db.prepare('UPDATE hands SET summary = ? WHERE id = ?').run(JSON.stringify(sum), this.handRowId);
+    }
+    this.emitEvent({ kind: 'show', seat: si, username: this.seats[si].username });
+    this.broadcast();
+  }
+
+  sendChat(user, { text, quick }) {
+    const QUICK = this.mgr.constructor.QUICK_CHAT;
+    let msg;
+    if (quick != null) {
+      msg = QUICK[Number(quick)];
+      if (!msg) throw new UserError('Mensaje rápido desconocido');
+    } else {
+      msg = String(text || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+      if (!msg) throw new UserError('El mensaje está vacío');
+      if (msg.length > 200) throw new UserError('El mensaje es demasiado largo (máximo 200 caracteres)');
+    }
+    const now = Date.now();
+    const recent = (this.chatTimes.get(user.id) || []).filter((t) => now - t < 10000);
+    if (recent.length >= 6) throw new UserError('Estás enviando mensajes muy rápido. Esperá unos segundos.');
+    recent.push(now);
+    this.chatTimes.set(user.id, recent);
+    const si = this.seatOf(user.id);
+    const m = { id: `${now}-${user.id}-${recent.length}`, userId: user.id, username: user.username, seat: si >= 0 ? si : null, text: msg, quick: quick != null, at: now };
+    this.chat.push(m);
+    if (this.chat.length > 60) this.chat.shift();
+    this.io.to(this.roomName).emit('table:chat', m);
+    return m;
+  }
+
   emitEvent(ev) { this.io.to(this.roomName).emit('table:event', ev); }
 
   broadcast() {
@@ -475,7 +521,7 @@ class Room {
     const h = this.hand && !this.hand.finished ? this.hand : null;
     const mySeat = this.seatOf(userId);
     const revealed = new Map();
-    if (!h && this.lastResult) for (const s of this.lastResult.showdown) revealed.set(s.seat, s.cards);
+    if (!h && this.lastResult) for (const s of [...this.lastResult.showdown, ...this.lastResult.shown]) revealed.set(s.seat, s.cards);
 
     const seats = this.seats.map((s, i) => {
       if (!s) return null;
@@ -526,6 +572,7 @@ class Room {
       isOwner: userId === this.t.owner_id,
       canStart: this.canStart(userId),
       mySeat: mySeat >= 0 ? mySeat : null,
+      canShowCards: !!(!h && this.lastResult && mySeat >= 0 && this.lastHoles && this.lastHoles.has(userId) && !revealed.has(mySeat)),
       seats,
       hand,
       dealerSeat: h ? h.dealerSeat : this.dealerSeat,
@@ -549,6 +596,14 @@ class Room {
 }
 
 class TableManager {
+  static QUICK_CHAT = [
+    '¿Vas de farol, verdad?',
+    'Te recomiendo irte',
+    'Te recomiendo pagar',
+    'Cagón',
+    '¡Escalera!',
+  ];
+
   constructor({ db, io, config }) {
     this.db = db;
     this.io = io;

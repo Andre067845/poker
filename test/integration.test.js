@@ -303,3 +303,73 @@ test('reinicio del servidor: se conservan asientos y fichas', async () => {
   await inst.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('mostrar cartas voluntariamente y chat de la mesa', async (t) => {
+  const inst = createApp({ dbFile: ':memory:', resultDelayMs: 60000, graceMs: 60000, sweepMs: 1000 });
+  const port = await inst.listen(0);
+  const base = `http://127.0.0.1:${port}`;
+  const a = client(base); const b = client(base);
+  await a.post('/api/auth/register', { username: 'sofi', email: 'sofi@example.com', password: '12345678' });
+  await b.post('/api/auth/register', { username: 'tomi', email: 'tomi@example.com', password: '12345678' });
+  const code = (await a.post('/api/tables', { name: 'Chat', maxPlayers: 4, startingStack: 500, smallBlind: 5, bigBlind: 10, turnSeconds: 30, allowRebuy: false, maxBuyin: 500 })).data.table.code;
+  const sa = a.socket(); const sb = b.socket();
+  t.after(async () => { sa.close(); sb.close(); await inst.close(); });
+  const chatA = []; const chatB = [];
+  sa.on('table:chat', (m) => chatA.push(m)); sb.on('table:chat', (m) => chatB.push(m));
+  await Promise.all([sa.ready, sb.ready]);
+  const joinA = await sa.call('table:join', { code });
+  assert.equal(joinA.quickChat.length, 5);
+  assert.ok(joinA.quickChat.includes('¿Vas de farol, verdad?'));
+  await sb.call('table:join', { code });
+
+  // chat rápido y libre
+  let ack = await sb.call('table:chat', { quick: 0 });
+  assert.ok(ack.ok, ack.error);
+  ack = await sa.call('table:chat', { text: '  <b>hola</b> mesa  ' });
+  assert.ok(ack.ok);
+  await until(() => chatA.length === 2 && chatB.length === 2, 2000, 'mensajes de chat');
+  assert.equal(chatA[0].text, '¿Vas de farol, verdad?');
+  assert.equal(chatA[0].username, 'tomi');
+  assert.equal(chatB[1].text, '<b>hola</b> mesa', 'el texto viaja tal cual; el cliente lo escapa al mostrarlo');
+  assert.equal((await sa.call('table:chat', { text: '' })).ok, false);
+  assert.equal((await sa.call('table:chat', { text: 'x'.repeat(201) })).ok, false);
+  assert.equal((await sa.call('table:chat', { quick: 99 })).ok, false);
+  // anti-spam
+  let blocked = false;
+  for (let i = 0; i < 8; i++) if (!(await sa.call('table:chat', { text: `spam ${i}` })).ok) blocked = true;
+  assert.ok(blocked, 'limita mensajes muy seguidos');
+  // quien entra después recibe el historial reciente
+  const sb2 = b.socket(); await sb2.ready;
+  const j2 = await sb2.call('table:join', { code });
+  assert.ok(j2.chat.length >= 2);
+  sb2.close();
+
+  // mano: el primero en hablar se retira, el otro gana sin showdown
+  await sa.call('table:sit', { amount: 500, requestId: 'sofi-sit-01' });
+  await sb.call('table:sit', { amount: 500, requestId: 'tomi-sit-01' });
+  await sa.call('table:ready', { ready: true }); await sb.call('table:ready', { ready: true });
+  assert.ok((await sa.call('table:start')).ok);
+  await until(() => sa.state && sa.state.hand && sb.state && sb.state.hand, 2000, 'mano');
+  assert.equal((await sa.call('table:show')).ok, false, 'no se puede mostrar durante la mano');
+  const turn = sa.state.hand.turnSeat === sa.state.mySeat ? sa : sb;
+  const winner = turn === sa ? sb : sa;
+  const myCards = winner.state.seats[winner.state.mySeat].cards;
+  ack = await turn.call('table:action', { type: 'fold', turnId: turn.state.hand.turnId, actionId: rid() });
+  assert.ok(ack.ok, ack.error);
+  await until(() => turn.state.lastResult && !turn.state.hand && winner.state.lastResult, 2000, 'resultado');
+  assert.equal(turn.state.lastResult.type, 'uncontested');
+  assert.equal(turn.state.seats[winner.state.mySeat].cards, null, 'sin mostrar, las cartas siguen ocultas');
+  assert.equal(winner.state.canShowCards, true);
+  ack = await winner.call('table:show');
+  assert.ok(ack.ok, ack.error);
+  await until(() => turn.state.seats[winner.state.mySeat].cards, 2000, 'cartas reveladas');
+  assert.deepEqual(turn.state.seats[winner.state.mySeat].cards, myCards);
+  assert.equal(winner.state.canShowCards, false);
+  // el que se retiró también puede mostrar las suyas
+  assert.equal(turn.state.canShowCards, true);
+  assert.ok((await turn.call('table:show')).ok);
+  await until(() => winner.state.seats[turn.state.mySeat].cards, 2000, 'cartas del retirado');
+  // queda registrado en el historial
+  const r = await a.get(`/api/history/${sa.state.sessionId}`);
+  assert.equal(r.data.session.hands[0].shown.length, 2);
+});

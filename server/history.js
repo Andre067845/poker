@@ -48,6 +48,7 @@ function createHistory(db) {
           board: sum && sum.board ? sum.board : [],
           winners: sum && sum.winners ? sum.winners.map((w) => ({ username: w.username, amount: w.amount, handName: w.handName })) : [],
           showdown: sum && sum.showdown ? sum.showdown.map((x) => ({ username: x.username, cards: x.cards, handName: x.handName })) : [],
+          shown: sum && sum.shown ? sum.shown.map((x) => ({ username: x.username, cards: x.cards })) : [],
         };
       });
 

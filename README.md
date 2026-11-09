@@ -54,7 +54,7 @@ Abrí `http://localhost:3000`. Para jugar con amigos a distancia el servidor tie
 | `COOKIE_SECURE` | `1` para marcar la cookie como `Secure` (con HTTPS) | `0` |
 | `TRUST_PROXY` | `1` si corre detrás de un proxy/CDN que termina HTTPS | `0` |
 | `GRACE_SECONDS` | Período de gracia por desconexión antes de liberar el asiento | `180` |
-| `RESULT_DELAY_MS` | Pausa para ver el resultado antes de la siguiente mano | `6000` |
+| `RESULT_DELAY_MS` | Pausa para ver el resultado (y poder mostrar cartas) antes de la siguiente mano | `8000` |
 
 **Lo único externo que hace falta configurar es el correo (SMTP)** para que la recuperación de contraseña llegue por email. Sin `SMTP_URL`, la app funciona igual pero el enlace de recuperación se imprime en la consola del servidor (el administrador puede reenviarlo a mano). Cualquier proveedor SMTP sirve (Gmail con contraseña de aplicación, Brevo, Mailgun, SES, etc.).
 
@@ -97,9 +97,15 @@ Además se probó en Chromium (Playwright) una partida completa entre una sesió
 - El creador inicia la partida; si el creador no está sentado, cualquier jugador sentado puede iniciarla (para que la mesa no quede bloqueada). Su desconexión no detiene el juego.
 - Si el servidor se reinicia a mitad de una mano, esa mano se anula y cada jugador recupera las fichas que tenía al empezarla (queda marcada como "anulada" en el historial).
 
+## Mostrar cartas y chat
+
+- **Mostrar mis cartas**: al terminar una mano, cualquier jugador que participó y cuyas cartas no se vieron (por ejemplo, el ganador cuando todos se retiraron, o quien se retiró) puede tocar "👁 Mostrar mis cartas" durante la pausa entre manos. Todos las ven en la mesa y queda registrado en el historial de la mano.
+- **Chat de la mesa** (botón 💬): mensajes libres de hasta 200 caracteres y frases rápidas ("¿Vas de farol, verdad?", "Te recomiendo irte", "Te recomiendo pagar", "Cagón", "¡Escalera!"). Cada mensaje aparece como globito sobre el asiento de quien lo envía. Hay límite anti-spam (6 mensajes cada 10 s). El chat guarda en memoria los últimos 60 mensajes de la mesa (se pierden si el servidor se reinicia).
+
 ## Pendiente / limitaciones conocidas
 
 - Envío real de correos: requiere configurar `SMTP_URL` (ver arriba).
-- No hay opción de "mostrar o descartar" cartas en el showdown: se muestran todas las manos que llegan al final.
-- No hay chat, modo espectador avanzado ni "sentarse afuera" (sit out) voluntario.
+- En el showdown se muestran todas las manos que llegan al final (no hay opción de descartar sin mostrar).
+- El chat no se guarda en la base de datos ni tiene moderación o silenciado de jugadores.
+- No hay "sentarse afuera" (sit out) voluntario.
 - Una sola instancia del servidor (no hay escalado horizontal).

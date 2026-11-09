@@ -35,6 +35,7 @@ const LIB = {
   chips: () => { tone(1500, 0, 0.04, 'triangle', 0.08); tone(1800, 0.04, 0.05, 'triangle', 0.07); tone(1300, 0.09, 0.05, 'triangle', 0.06); },
   fold: () => { tone(300, 0, 0.12, 'sine', 0.06); },
   turn: () => { tone(660, 0, 0.12, 'sine', 0.14); tone(880, 0.14, 0.18, 'sine', 0.14); },
+  chat: () => { tone(1200, 0, 0.06, 'sine', 0.07); },
   win: () => { [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.2, 'triangle', 0.1)); },
 };
 

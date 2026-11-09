@@ -146,8 +146,8 @@ function createApp(overrides = {}) {
 
   // Frontend
   const pub = path.join(__dirname, '..', 'public');
-  app.use(express.static(pub, { index: false, maxAge: '1h' }));
-  app.get('*', (req, res) => res.sendFile(path.join(pub, 'index.html')));
+  app.use(express.static(pub, { index: false, maxAge: 0 }));
+  app.get('*', (req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(path.join(pub, 'index.html')); });
 
   const server = http.createServer(app);
   const io = new Server(server, { pingInterval: 10000, pingTimeout: 8000 });

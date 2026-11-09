@@ -16,5 +16,5 @@ services:
         value: "1"
       - key: TRUST_PROXY
         value: "1"
-      - key: DATABASE_URL
-        sync: false   # Render te la pide al crear: pegá la "connection string" de Neon
+      # Opcional: agregá DATABASE_URL (Postgres gratis de Neon) en Environment
+      # para que cuentas e historial sobrevivan a los reinicios del plan gratis.

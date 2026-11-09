@@ -72,7 +72,7 @@ Sin pagar nada y sin tarjeta: **Render** (plan Free) corre el servidor y **Neon*
 **2. Servidor gratis en Render**
 1. Entrá a https://render.com y creá una cuenta con tu GitHub.
 2. **New → Blueprint** → elegí el repositorio **andre067845/poker** (y la rama donde está este código, o uní la rama a `main`).
-3. Render lee `render.yaml` (plan **Free**) y te pide `DATABASE_URL`: pegá la connection string de Neon.
+3. Render lee `render.yaml` (plan **Free**). Después, en *Environment*, agregá `DATABASE_URL` con la connection string de Neon (si no la agregás, la app funciona igual pero se borran cuentas e historial cada vez que Render reinicia el servidor).
 4. **Deploy Blueprint**. En unos minutos te da una dirección como `https://poker-entre-amigos.onrender.com`.
 
 **3. Jugar**: abrí esa dirección en Safari (o cualquier navegador), creá tu cuenta, creá una mesa y compartí el enlace de invitación.

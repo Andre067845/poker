@@ -32,7 +32,6 @@ class UserError extends Error {
 }
 
 const USERNAME_RE = /^[\p{L}\p{N}_.-]{3,20}$/u;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function validatePassword(pw) {
   if (typeof pw !== 'string' || pw.length < 8) throw new UserError('La contraseña debe tener al menos 8 caracteres');
@@ -41,41 +40,69 @@ function validatePassword(pw) {
 
 function createAuth(db) {
   function publicUser(u) {
-    return u && { id: u.id, username: u.username, email: u.email, code: u.code };
+    return u && { id: u.id, username: u.username, code: u.code };
   }
 
-  function register({ username, email, password }) {
+  /** Código secreto para recuperar la cuenta sin correo. Se muestra una sola vez. */
+  function newRecoveryCode() {
+    const parts = [];
+    for (let i = 0; i < 4; i++) parts.push(randomCode(4));
+    return parts.join('-');
+  }
+  const normRecovery = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  function register({ username, password }) {
     username = String(username || '').trim();
-    email = String(email || '').trim().toLowerCase();
     if (!USERNAME_RE.test(username)) throw new UserError('El nombre de usuario debe tener entre 3 y 20 caracteres (letras, números, punto, guion o guion bajo)');
-    if (!EMAIL_RE.test(email) || email.length > 200) throw new UserError('El correo no es válido');
     validatePassword(password);
     if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) throw new UserError('Ese nombre de usuario ya está en uso', 409);
-    if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) throw new UserError('Ya existe una cuenta con ese correo', 409);
     const hash = hashPassword(password);
+    const recoveryCode = newRecoveryCode();
+    const recoveryHash = hashPassword(normRecovery(recoveryCode));
     for (let attempt = 0; attempt < 20; attempt++) {
       const code = `PKR-${randomCode(6)}`;
       try {
-        const r = db.prepare('INSERT INTO users (username, email, password_hash, code, created_at) VALUES (?,?,?,?,?)')
-          .run(username, email, hash, code, now());
-        return publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(r.lastInsertRowid));
+        const r = db.prepare('INSERT INTO users (username, password_hash, recovery_hash, code, created_at) VALUES (?,?,?,?,?)')
+          .run(username, hash, recoveryHash, code, now());
+        return { user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(r.lastInsertRowid)), recoveryCode };
       } catch (e) {
-        if (!/UNIQUE/.test(e.message) || !/code/.test(e.message)) {
-          if (/UNIQUE/.test(e.message)) throw new UserError('Ese usuario o correo ya está registrado', 409);
-          throw e;
-        }
+        if (!/UNIQUE/.test(e.message)) throw e;
+        if (/username/.test(e.message)) throw new UserError('Ese nombre de usuario ya está en uso', 409);
       }
     }
     throw new Error('No se pudo generar un código único');
   }
 
-  function login({ login: ident, password }) {
-    ident = String(ident || '').trim();
-    const u = db.prepare('SELECT * FROM users WHERE username = ? OR email = ?').get(ident, ident.toLowerCase());
+  function login({ username, login: ident, password }) {
+    ident = String(username || ident || '').trim();
+    const u = db.prepare('SELECT * FROM users WHERE username = ?').get(ident);
     // Siempre se calcula un hash para no revelar si el usuario existe por el tiempo de respuesta.
     const ok = u ? verifyPassword(String(password || ''), u.password_hash) : (hashPassword('x'), false);
     if (!ok) throw new UserError('Usuario o contraseña incorrectos', 401);
     return publicUser(u);
+  }
+
+  /** Cambia la contraseña con el código de recuperación y entrega un código nuevo. */
+  function recoverWithCode({ username, recoveryCode, password }) {
+    validatePassword(password);
+    const u = db.prepare('SELECT * FROM users WHERE username = ?').get(String(username || '').trim());
+    const ok = u && u.recovery_hash ? verifyPassword(normRecovery(recoveryCode), u.recovery_hash) : (hashPassword('x'), false);
+    if (!ok) throw new UserError('El usuario o el código de recuperación no son correctos', 401);
+    const fresh = newRecoveryCode();
+    db.tx(() => {
+      db.prepare('UPDATE users SET password_hash = ?, recovery_hash = ? WHERE id = ?').run(hashPassword(password), hashPassword(normRecovery(fresh)), u.id);
+      db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(u.id); // cierra todas las sesiones abiertas
+    });
+    return { user: publicUser(u), recoveryCode: fresh };
+  }
+
+  /** Genera un código de recuperación nuevo (requiere la contraseña actual). */
+  function regenerateRecovery(userId, password) {
+    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!u || !verifyPassword(String(password || ''), u.password_hash)) throw new UserError('La contraseña no es correcta', 401);
+    const fresh = newRecoveryCode();
+    db.prepare('UPDATE users SET recovery_hash = ? WHERE id = ?').run(hashPassword(normRecovery(fresh)), u.id);
+    return fresh;
   }
 
   function createSession(userId) {
@@ -97,30 +124,7 @@ function createAuth(db) {
     if (token) db.prepare('DELETE FROM auth_sessions WHERE token_hash = ?').run(sha256(token));
   }
 
-  /** Devuelve el token en claro (para enviar por correo) o null si el correo no existe. */
-  function createPasswordReset(email) {
-    const u = db.prepare('SELECT * FROM users WHERE email = ?').get(String(email || '').trim().toLowerCase());
-    if (!u) return null;
-    const token = crypto.randomBytes(32).toString('base64url');
-    db.prepare('INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?,?,?)')
-      .run(sha256(token), u.id, new Date(Date.now() + 3600e3).toISOString());
-    return { token, user: publicUser(u) };
-  }
-
-  function resetPassword(token, password) {
-    validatePassword(password);
-    return db.tx(() => {
-      const r = db.prepare('SELECT * FROM password_resets WHERE token_hash = ?').get(sha256(String(token || '')));
-      if (!r || r.used_at || r.expires_at < now()) throw new UserError('El enlace de recuperación no es válido o ya venció');
-      db.prepare('UPDATE password_resets SET used_at = ? WHERE token_hash = ?').run(now(), r.token_hash);
-      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), r.user_id);
-      // Cierra todas las sesiones abiertas de esa cuenta.
-      db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(r.user_id);
-      return r.user_id;
-    });
-  }
-
-  return { register, login, createSession, userFromToken, destroySession, createPasswordReset, resetPassword, publicUser };
+  return { register, login, createSession, userFromToken, destroySession, recoverWithCode, regenerateRecovery, publicUser };
 }
 
 module.exports = { createAuth, UserError, randomCode, hashPassword, verifyPassword };

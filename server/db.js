@@ -9,8 +9,8 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT NOT NULL,
+  recovery_hash TEXT,
   code          TEXT NOT NULL UNIQUE,
   created_at    TEXT NOT NULL
 );
@@ -22,12 +22,6 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   expires_at  TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS password_resets (
-  token_hash  TEXT PRIMARY KEY,
-  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  expires_at  TEXT NOT NULL,
-  used_at     TEXT
-);
 
 CREATE TABLE IF NOT EXISTS poker_tables (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,11 +96,37 @@ function openDb(file) {
   const db = new DatabaseSync(file);
   if (file !== ':memory:') db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrate(db);
   db.tx = (fn) => {
     db.exec('BEGIN IMMEDIATE');
     try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; }
   };
   return db;
+}
+
+/** Migraciones de bases creadas con versiones anteriores (cuando el registro pedía correo). */
+function migrate(db) {
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!cols.includes('recovery_hash')) db.exec('ALTER TABLE users ADD COLUMN recovery_hash TEXT');
+  if (cols.includes('email')) {
+    // El correo ya no se usa: se elimina la columna (y su índice único).
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec(`BEGIN;
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash TEXT NOT NULL,
+        recovery_hash TEXT,
+        code TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL);
+      INSERT INTO users_new (id, username, password_hash, recovery_hash, code, created_at)
+        SELECT id, username, password_hash, recovery_hash, code, created_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      DROP TABLE IF EXISTS password_resets;
+      COMMIT;`);
+    db.exec('PRAGMA foreign_keys = ON');
+  }
 }
 
 const now = () => new Date().toISOString();

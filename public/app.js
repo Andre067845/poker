@@ -2,7 +2,7 @@
 import { sounds } from './sound.js';
 
 const $app = document.getElementById('app');
-const state = { user: null, mailConfigured: false };
+const state = { user: null };
 
 // ------------------------------------------------------------------ utilidades
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -113,9 +113,7 @@ async function route() {
   if (cleanup) { const c = cleanup; cleanup = null; c(); }
   document.getElementById('modal-root').innerHTML = '';
   const path = location.pathname;
-  const params = new URLSearchParams(location.search);
 
-  if (path === '/restablecer') return renderReset(params.get('token'));
   if (!state.user) {
     if (path.startsWith('/m/') || path.startsWith('/historial')) sessionStorage.setItem('afterLogin', path);
     return renderAuth();
@@ -196,8 +194,8 @@ function renderAuth(mode = 'login') {
   if (mode === 'login') {
     box.innerHTML = `
       <form id="f" novalidate>
-        <label for="login">Usuario o correo</label>
-        <input id="login" name="login" type="text" autocomplete="username" required>
+        <label for="username">Nombre de usuario</label>
+        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" required>
         <label for="password">Contraseña</label>
         <input id="password" name="password" type="password" autocomplete="current-password" required>
         <div id="err"></div>
@@ -209,12 +207,12 @@ function renderAuth(mode = 'login') {
     box.innerHTML = `
       <form id="f" novalidate>
         <label for="username">Nombre de usuario</label>
-        <input id="username" name="username" type="text" autocomplete="username" maxlength="20" required>
+        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" maxlength="20" required>
         <div class="hint">Entre 3 y 20 caracteres. Es el nombre que verán tus amigos.</div>
-        <label for="email">Correo electrónico</label>
-        <input id="email" name="email" type="email" autocomplete="email" required>
         <label for="password">Contraseña</label>
         <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+        <label for="password2">Repetí la contraseña</label>
+        <input id="password2" name="password2" type="password" autocomplete="new-password" required>
         <div class="hint">Mínimo 8 caracteres.</div>
         <div id="err"></div>
         <button class="btn primary block" style="margin-top:1em">Crear cuenta</button>
@@ -224,70 +222,84 @@ function renderAuth(mode = 'login') {
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(f));
+    const err = document.getElementById('err');
+    if (mode === 'register' && data.password !== data.password2) { err.innerHTML = '<div class="form-error">Las contraseñas no coinciden</div>'; return; }
+    delete data.password2;
     const btn = f.querySelector('button');
     btn.disabled = true;
     try {
       const r = await api('POST', mode === 'login' ? '/api/auth/login' : '/api/auth/register', data);
       state.user = r.user;
-      if (mode === 'register') toast(`¡Bienvenido/a! Tu código de jugador es ${r.user.code}`, 'ok');
+      if (mode === 'register') {
+        await showRecoveryCode(r.recoveryCode, `¡Bienvenido/a, ${r.user.username}! Tu código de jugador es ${r.user.code}.`);
+      }
       route();
-    } catch (err) {
-      document.getElementById('err').innerHTML = `<div class="form-error">${esc(err.message)}</div>`;
+    } catch (e2) {
+      err.innerHTML = `<div class="form-error">${esc(e2.message)}</div>`;
       btn.disabled = false;
     }
+  });
+}
+
+/** Muestra el código de recuperación y espera a que el usuario confirme que lo guardó. */
+function showRecoveryCode(code, intro = '') {
+  return new Promise((resolve) => {
+    const root = document.getElementById('modal-root');
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+      ${intro ? `<p>${esc(intro)}</p>` : ''}
+      <h2>Tu código de recuperación</h2>
+      <p class="muted small">Como no usamos correo, este código es la <b>única forma de recuperar tu cuenta</b> si olvidás la contraseña. Guardalo en un lugar seguro (por ejemplo, sacale una captura). No se lo des a nadie: no lo vas a volver a ver.</p>
+      <div class="recovery-code mono">${esc(code)}</div>
+      <div class="row" style="justify-content:flex-start"><button class="btn" id="rc-copy">Copiar código</button></div>
+      <label class="check"><input type="checkbox" id="rc-ok"> Ya lo guardé</label>
+      <div class="row"><button class="btn primary" id="rc-done" disabled>Continuar</button></div>
+    </div>`;
+    root.appendChild(back);
+    const ok = back.querySelector('#rc-ok');
+    const done = back.querySelector('#rc-done');
+    back.querySelector('#rc-copy').addEventListener('click', () => copyText(code));
+    ok.addEventListener('change', () => { done.disabled = !ok.checked; });
+    done.addEventListener('click', () => { back.remove(); resolve(); });
   });
 }
 
 function renderForgot() {
   const box = document.getElementById('auth-form');
   box.innerHTML = `
-    <h2>Recuperar contraseña</h2>
-    <p class="muted small">Escribí el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.</p>
+    <h2>Recuperar la cuenta</h2>
+    <p class="muted small">Ingresá tu usuario y el código de recuperación que te mostramos al crear la cuenta.</p>
     <form id="f" novalidate>
-      <label for="email">Correo electrónico</label>
-      <input id="email" name="email" type="email" autocomplete="email" required>
-      <div id="err"></div>
-      <button class="btn primary block" style="margin-top:1em">Enviar enlace</button>
-    </form>
-    <p class="small" style="text-align:center;margin-top:1em"><a href="#" id="back">Volver a iniciar sesión</a></p>`;
-  document.getElementById('back').addEventListener('click', (e) => { e.preventDefault(); renderAuth('login'); });
-  const f = document.getElementById('f');
-  f.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    try {
-      const r = await api('POST', '/api/auth/forgot', Object.fromEntries(new FormData(f)));
-      document.getElementById('err').innerHTML = `<div class="form-ok">${esc(r.message)}</div>`;
-    } catch (err) {
-      document.getElementById('err').innerHTML = `<div class="form-error">${esc(err.message)}</div>`;
-    }
-  });
-}
-
-function renderReset(token) {
-  $app.innerHTML = `
-  <div class="auth-wrap"><div class="auth-box"><div class="card-panel">
-    <h2>Elegí una contraseña nueva</h2>
-    <form id="f" novalidate>
+      <label for="username">Nombre de usuario</label>
+      <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" required>
+      <label for="recoveryCode">Código de recuperación</label>
+      <input id="recoveryCode" name="recoveryCode" type="text" class="mono" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX" required>
       <label for="password">Contraseña nueva</label>
       <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
-      <label for="password2">Repetila</label>
+      <label for="password2">Repetí la contraseña nueva</label>
       <input id="password2" name="password2" type="password" autocomplete="new-password" required>
       <div id="err"></div>
-      <button class="btn primary block" style="margin-top:1em">Guardar contraseña</button>
+      <button class="btn primary block" style="margin-top:1em">Cambiar contraseña</button>
     </form>
-  </div></div></div>`;
+    <p class="small" style="text-align:center;margin-top:1em"><a href="#" id="back">Volver a iniciar sesión</a></p>
+    <p class="muted small" style="text-align:center">Si perdiste el código y la contraseña, no hay forma de recuperar la cuenta: creá una nueva.</p>`;
+  document.getElementById('back').addEventListener('click', (e) => { e.preventDefault(); renderAuth('login'); });
   const f = document.getElementById('f');
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(f));
     const err = document.getElementById('err');
     if (d.password !== d.password2) { err.innerHTML = '<div class="form-error">Las contraseñas no coinciden</div>'; return; }
+    delete d.password2;
     try {
-      const r = await api('POST', '/api/auth/reset', { token, password: d.password });
-      state.user = null;
-      toast(r.message, 'ok');
-      navigate('/', true);
-    } catch (e2) { err.innerHTML = `<div class="form-error">${esc(e2.message)}</div>`; }
+      const r = await api('POST', '/api/auth/recover', d);
+      state.user = r.user;
+      await showRecoveryCode(r.recoveryCode, 'Listo, cambiaste tu contraseña. El código anterior ya no sirve: este es tu código nuevo.');
+      route();
+    } catch (e2) {
+      err.innerHTML = `<div class="form-error">${esc(e2.message)}</div>`;
+    }
   });
 }
 
@@ -305,10 +317,30 @@ async function renderLobby() {
         <a class="btn primary" href="/crear" data-link>＋ Crear mesa</a>
         <button class="btn" id="join-btn">Unirse a una mesa</button>
       </div>
+      <div style="flex-basis:100%"><a href="#" class="small" id="recovery-link">🔑 Generar un código de recuperación nuevo</a></div>
     </section>
     <h2 style="margin-top:1.4em">Tus mesas</h2>
     <div id="tables"><p class="muted">Cargando…</p></div>`);
   document.getElementById('join-btn').addEventListener('click', openJoinModal);
+  document.getElementById('recovery-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    modal(`<h2>Código de recuperación nuevo</h2>
+      <p class="muted small">Si perdiste tu código o creés que alguien lo vio, generá uno nuevo. El anterior deja de funcionar.</p>
+      <form id="rcf"><label for="rc-pw">Tu contraseña actual</label>
+      <input id="rc-pw" type="password" autocomplete="current-password">
+      <div id="rc-err"></div>
+      <div class="row"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary">Generar</button></div></form>`,
+    (m, close) => {
+      m.querySelector('#rcf').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        try {
+          const r = await api('POST', '/api/auth/recovery-code', { password: m.querySelector('#rc-pw').value });
+          close();
+          await showRecoveryCode(r.recoveryCode);
+        } catch (e2) { m.querySelector('#rc-err').innerHTML = `<div class="form-error">${esc(e2.message)}</div>`; }
+      });
+    });
+  });
   try {
     const { tables } = await api('GET', '/api/tables');
     const box = document.getElementById('tables');
@@ -600,7 +632,7 @@ function renderTable(code, opts = {}) {
     const anchor = mySeat == null ? 0 : mySeat;
     const k = ((seatIdx - anchor) % n + n) % n;
     const ang = Math.PI / 2 + (k * 2 * Math.PI) / n;
-    const narrow = window.matchMedia('(max-width: 700px)').matches;
+    const narrow = window.matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
     const rx = narrow ? 40 : 44; const ry = narrow ? 42 : 41;
     return { x: 50 + rx * Math.cos(ang), y: 50 + ry * Math.sin(ang), ang };
   }
@@ -875,6 +907,7 @@ function renderTable(code, opts = {}) {
         Invitá amigos con el botón 🔗.</div>`;
     }
     panel.innerHTML = html;
+    panel.classList.toggle('my-turn', !!L);
     bindPanel(L);
   }
 
@@ -1017,6 +1050,7 @@ function renderTable(code, opts = {}) {
           <dt>Creador</dt><dd>${esc(st.table.ownerName)}</dd></dl>` : ''}
         <div class="row"><button class="btn" id="m-rules">Reglas y combinaciones</button>
           <button class="btn" id="m-sound">${sounds.enabled ? '🔇 Silenciar' : '🔊 Activar sonido'}</button></div>
+        ${me && st.table.allowRebuy ? '<button class="btn" id="m-rebuy">Recargar Bs</button>' : ''}
         ${me ? '<button class="btn red" id="m-leave">Abandonar la mesa</button>' : ''}
         ${st && st.isOwner && st.table.status === 'open' ? '<button class="btn" id="m-close">Cerrar la mesa para todos</button>' : ''}
         <button class="btn ghost" data-close>Cerrar</button>
@@ -1029,6 +1063,8 @@ function renderTable(code, opts = {}) {
         document.getElementById('t-sound').textContent = sounds.enabled ? '🔊' : '🔇';
         toast(sounds.enabled ? 'Sonido activado' : 'Sonido desactivado');
       });
+      const rb = m.querySelector('#m-rebuy');
+      rb && rb.addEventListener('click', () => { close(); rebuyModal(); });
       const lv = m.querySelector('#m-leave');
       lv && lv.addEventListener('click', () => { close(); leaveTable(); });
       const cl = m.querySelector('#m-close');
@@ -1169,7 +1205,6 @@ function renderRules() {
   try {
     const r = await api('GET', '/api/me');
     state.user = r.user;
-    state.mailConfigured = r.mailConfigured;
   } catch { state.user = null; }
   route();
 }());

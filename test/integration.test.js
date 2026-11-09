@@ -48,7 +48,7 @@ const rid = () => crypto.randomUUID();
 test('partida completa entre dos sesiones independientes', async (t) => {
   const inst = createApp({
     dbFile: ':memory:', resultDelayMs: 150, graceMs: 1200, sweepMs: 200,
-    turnMsOverride: 1500, exposeResetLinks: true,
+    turnMsOverride: 1500,
   });
   const port = await inst.listen(0);
   const base = `http://127.0.0.1:${port}`;
@@ -60,28 +60,38 @@ test('partida completa entre dos sesiones independientes', async (t) => {
   const carol = client(base);
 
   // ---------- registro, códigos únicos, login y recuperación
-  let r = await alice.post('/api/auth/register', { username: 'alicia', email: 'alicia@example.com', password: 'secreto123' });
+  let r = await alice.post('/api/auth/register', { username: 'alicia', password: 'secreto123' });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.match(r.data.user.code, /^PKR-[A-Z2-9]{6}$/);
   const aliceUser = r.data.user;
-  r = await bob.post('/api/auth/register', { username: 'beto', email: 'beto@example.com', password: 'clave-bob-1' });
+  r = await bob.post('/api/auth/register', { username: 'beto', password: 'clave-bob-1' });
   const bobUser = r.data.user;
+  const bobRecovery = r.data.recoveryCode;
+  assert.ok(!('email' in bobUser));
   assert.notEqual(aliceUser.code, bobUser.code);
-  r = await carol.post('/api/auth/register', { username: 'carola', email: 'carola@example.com', password: 'clave-carol' });
-  r = await bob.post('/api/auth/register', { username: 'beto', email: 'otro@example.com', password: 'clave-bob-1' });
-  assert.equal(r.status, 409);
-  r = await client(base).post('/api/auth/login', { login: 'beto', password: 'incorrecta' });
+  r = await carol.post('/api/auth/register', { username: 'carola', password: 'clave-carol' });
+  r = await bob.post('/api/auth/register', { username: 'BETO', password: 'clave-bob-1' });
+  assert.equal(r.status, 409, 'usuario repetido (sin distinguir mayúsculas)');
+  r = await client(base).post('/api/auth/login', { username: 'beto', password: 'incorrecta' });
   assert.equal(r.status, 401);
-  r = await client(base).post('/api/auth/forgot', { email: 'beto@example.com' });
-  const token = new URL(r.data.devLink).searchParams.get('token');
-  r = await client(base).post('/api/auth/reset', { token, password: 'nueva-clave-bob' });
-  assert.equal(r.status, 200);
-  r = await client(base).post('/api/auth/reset', { token, password: 'otra-clave-bob' });
-  assert.equal(r.status, 400, 'el enlace no se puede reutilizar');
+  // recuperación con el código mostrado al registrarse (no hay correo)
+  r = await client(base).post('/api/auth/recover', { username: 'beto', recoveryCode: 'AAAA-BBBB-CCCC-DDDD', password: 'nueva-clave-bob' });
+  assert.equal(r.status, 401, 'código incorrecto');
+  r = await client(base).post('/api/auth/recover', { username: 'beto', recoveryCode: bobRecovery.toLowerCase().replace(/-/g, ' '), password: 'nueva-clave-bob' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.recoveryCode, /^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/);
+  assert.notEqual(r.data.recoveryCode, bobRecovery);
+  r = await client(base).post('/api/auth/recover', { username: 'beto', recoveryCode: bobRecovery, password: 'otra-clave-bob' });
+  assert.equal(r.status, 401, 'el código usado deja de servir');
   r = await bob.get('/api/me');
   assert.equal(r.data.user, null, 'el cambio de contraseña cierra las sesiones');
-  r = await bob.post('/api/auth/login', { login: 'beto@example.com', password: 'nueva-clave-bob' });
+  r = await bob.post('/api/auth/login', { username: 'beto', password: 'nueva-clave-bob' });
   assert.equal(r.status, 200);
+  r = await bob.post('/api/auth/recovery-code', { password: 'mala' });
+  assert.equal(r.status, 401);
+  r = await bob.post('/api/auth/recovery-code', { password: 'nueva-clave-bob' });
+  assert.equal(r.status, 200);
+  assert.ok(r.data.recoveryCode);
 
   // ---------- crear mesa con validaciones
   const settings = { name: 'Viernes', maxPlayers: 6, startingStack: 1000, smallBlind: 5, bigBlind: 10, turnSeconds: 30, allowRebuy: true, maxBuyin: 2000 };
@@ -272,8 +282,8 @@ test('reinicio del servidor: se conservan asientos y fichas', async () => {
   let port = await inst.listen(0);
   let base = `http://127.0.0.1:${port}`;
   const a = client(base); const b = client(base);
-  await a.post('/api/auth/register', { username: 'ana', email: 'ana@example.com', password: '12345678' });
-  await b.post('/api/auth/register', { username: 'bruno', email: 'bruno@example.com', password: '12345678' });
+  await a.post('/api/auth/register', { username: 'ana', password: '12345678' });
+  await b.post('/api/auth/register', { username: 'bruno', password: '12345678' });
   const code = (await a.post('/api/tables', { name: 'R', maxPlayers: 2, startingStack: 500, smallBlind: 1, bigBlind: 2, turnSeconds: 30, allowRebuy: false, maxBuyin: 500 })).data.table.code;
   let sa = a.socket(); let sb = b.socket();
   await Promise.all([sa.ready, sb.ready]);
@@ -291,7 +301,7 @@ test('reinicio del servidor: se conservan asientos y fichas', async () => {
   port = await inst.listen(0);
   base = `http://127.0.0.1:${port}`;
   const a2 = client(base);
-  await a2.post('/api/auth/login', { login: 'ana', password: '12345678' });
+  await a2.post('/api/auth/login', { username: 'ana', password: '12345678' });
   sa = a2.socket(); await sa.ready;
   const ack = await sa.call('table:join', { code });
   assert.ok(ack.ok);
@@ -309,8 +319,8 @@ test('mostrar cartas voluntariamente y chat de la mesa', async (t) => {
   const port = await inst.listen(0);
   const base = `http://127.0.0.1:${port}`;
   const a = client(base); const b = client(base);
-  await a.post('/api/auth/register', { username: 'sofi', email: 'sofi@example.com', password: '12345678' });
-  await b.post('/api/auth/register', { username: 'tomi', email: 'tomi@example.com', password: '12345678' });
+  await a.post('/api/auth/register', { username: 'sofi', password: '12345678' });
+  await b.post('/api/auth/register', { username: 'tomi', password: '12345678' });
   const code = (await a.post('/api/tables', { name: 'Chat', maxPlayers: 4, startingStack: 500, smallBlind: 5, bigBlind: 10, turnSeconds: 30, allowRebuy: false, maxBuyin: 500 })).data.table.code;
   const sa = a.socket(); const sb = b.socket();
   t.after(async () => { sa.close(); sb.close(); await inst.close(); });

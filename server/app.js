@@ -5,7 +5,6 @@ const express = require('express');
 const { Server } = require('socket.io');
 const { openDb } = require('./db');
 const { createAuth, UserError } = require('./auth');
-const { createMailer } = require('./mailer');
 const { createHistory } = require('./history');
 const { TableManager } = require('./tables');
 
@@ -38,15 +37,11 @@ function defaultConfig(overrides = {}) {
   return {
     port: Number(env.PORT || 3000),
     dbFile: env.DB_FILE || path.join(__dirname, '..', 'data', 'poker.db'),
-    appUrl: env.APP_URL || '',
-    smtpUrl: env.SMTP_URL || '',
-    mailFrom: env.MAIL_FROM || 'Póker entre Amigos <no-reply@localhost>',
     cookieSecure: env.COOKIE_SECURE === '1',
     trustProxy: env.TRUST_PROXY === '1',
     graceMs: Number(env.GRACE_SECONDS || 180) * 1000,
     resultDelayMs: Number(env.RESULT_DELAY_MS || 8000),
     sweepMs: 5000,
-    exposeResetLinks: env.EXPOSE_RESET_LINKS === '1',
     ...overrides,
   };
 }
@@ -55,7 +50,6 @@ function createApp(overrides = {}) {
   const config = defaultConfig(overrides);
   const db = openDb(config.dbFile);
   const auth = createAuth(db);
-  const mailer = createMailer(config);
   const history = createHistory(db);
 
   const app = express();
@@ -109,9 +103,9 @@ function createApp(overrides = {}) {
   const authLimiter = rateLimiter(30, 10 * 60 * 1000);
 
   app.post('/api/auth/register', authLimiter, wrap((req, res) => {
-    const user = auth.register(req.body || {});
+    const { user, recoveryCode } = auth.register(req.body || {});
     setSessionCookie(req, res, user);
-    return { user };
+    return { user, recoveryCode };
   }));
   app.post('/api/auth/login', authLimiter, wrap((req, res) => {
     const user = auth.login(req.body || {});
@@ -122,23 +116,13 @@ function createApp(overrides = {}) {
     auth.destroySession(req.token);
     res.clearCookie(COOKIE, { path: '/' });
   }));
-  app.post('/api/auth/forgot', authLimiter, wrap(async (req) => {
-    const r = auth.createPasswordReset((req.body || {}).email);
-    const out = { ok: true, message: 'Si el correo está registrado, te enviamos un enlace para cambiar la contraseña.' };
-    if (r) {
-      const base = config.appUrl || `${req.protocol}://${req.get('host')}`;
-      const link = `${base}/restablecer?token=${encodeURIComponent(r.token)}`;
-      try { await mailer.sendPasswordReset(r.user.email, r.user.username, link); } catch (e) { console.error('No se pudo enviar el correo', e); }
-      if (config.exposeResetLinks) out.devLink = link; // solo para pruebas automatizadas
-    }
-    return out;
+  app.post('/api/auth/recover', authLimiter, wrap((req, res) => {
+    const { user, recoveryCode } = auth.recoverWithCode(req.body || {});
+    setSessionCookie(req, res, user);
+    return { user, recoveryCode };
   }));
-  app.post('/api/auth/reset', authLimiter, wrap((req) => {
-    const { token, password } = req.body || {};
-    auth.resetPassword(token, password);
-    return { ok: true, message: 'Listo. Ya podés iniciar sesión con tu nueva contraseña.' };
-  }));
-  app.get('/api/me', (req, res) => res.json({ user: req.user || null, mailConfigured: mailer.configured }));
+  app.post('/api/auth/recovery-code', authLimiter, requireUser, wrap((req) => ({ recoveryCode: auth.regenerateRecovery(req.user.id, (req.body || {}).password) })));
+  app.get('/api/me', (req, res) => res.json({ user: req.user || null }));
 
   // Mesas
   let tables; // se crea después de io

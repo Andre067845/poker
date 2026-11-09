@@ -23,7 +23,7 @@ server/
   engine/evaluator.js   evaluación de la mejor mano de 5 entre 7
   engine/holdem.js      una mano completa: ciegas, rondas, botes, showdown
   tables.js             mesas en tiempo real: asientos, temporizador, reconexión, persistencia
-  auth.js               registro, login (scrypt), sesiones por cookie HttpOnly, recuperación
+  auth.js               registro y login con usuario y contraseña (scrypt), sesiones por cookie HttpOnly, código de recuperación
   history.js            historial de sesiones y balance de fichas
   app.js / index.js     HTTP + Socket.IO
 public/                 interfaz (index.html, app.js, styles.css, sound.js)
@@ -48,15 +48,16 @@ Abrí `http://localhost:3000`. Para jugar con amigos a distancia el servidor tie
 |---|---|---|
 | `PORT` | Puerto HTTP | `3000` |
 | `DB_FILE` | Ruta del archivo SQLite | `data/poker.db` |
-| `APP_URL` | URL pública (para los enlaces de los correos) | se deduce del pedido |
-| `SMTP_URL` | Servidor de correo para recuperar contraseñas, p. ej. `smtps://usuario:clave@smtp.proveedor.com:465` | vacío |
-| `MAIL_FROM` | Remitente de los correos | `Póker entre Amigos <no-reply@localhost>` |
 | `COOKIE_SECURE` | `1` para marcar la cookie como `Secure` (con HTTPS) | `0` |
 | `TRUST_PROXY` | `1` si corre detrás de un proxy/CDN que termina HTTPS | `0` |
 | `GRACE_SECONDS` | Período de gracia por desconexión antes de liberar el asiento | `180` |
 | `RESULT_DELAY_MS` | Pausa para ver el resultado (y poder mostrar cartas) antes de la siguiente mano | `8000` |
 
-**Lo único externo que hace falta configurar es el correo (SMTP)** para que la recuperación de contraseña llegue por email. Sin `SMTP_URL`, la app funciona igual pero el enlace de recuperación se imprime en la consola del servidor (el administrador puede reenviarlo a mano). Cualquier proveedor SMTP sirve (Gmail con contraseña de aplicación, Brevo, Mailgun, SES, etc.).
+**No hace falta ningún servicio externo.** Las cuentas solo piden nombre de usuario y contraseña (no se pide correo).
+
+### Recuperar la contraseña sin correo
+
+Al crear la cuenta se muestra **una sola vez** un código de recuperación (`XXXX-XXXX-XXXX-XXXX`) y el usuario debe confirmar que lo guardó. Con su usuario y ese código puede elegir una contraseña nueva desde "¿Olvidaste tu contraseña?"; en ese momento se cierran sus otras sesiones y se le entrega un código nuevo (el anterior deja de servir). Desde el lobby puede generar otro código ingresando su contraseña actual. Los códigos se guardan cifrados (scrypt), igual que las contraseñas. Si alguien pierde la contraseña y el código, la cuenta no se puede recuperar.
 
 ## Despliegue
 
@@ -67,7 +68,7 @@ docker build -t poker .
 ```
 
 ```bash
-docker run -p 3000:3000 -v poker-data:/data -e COOKIE_SECURE=1 -e TRUST_PROXY=1 -e APP_URL=https://tu-dominio poker
+docker run -p 3000:3000 -v poker-data:/data -e COOKIE_SECURE=1 -e TRUST_PROXY=1 poker
 ```
 
 Usá una sola instancia (el estado de las manos en curso vive en memoria del proceso; los datos persistentes están en SQLite). Poné HTTPS delante (lo da el hosting o un proxy como Caddy/Nginx).
@@ -79,7 +80,7 @@ npm test
 ```
 
 - `test/engine.test.js` — evaluador (todas las categorías, As bajo en A-2-3-4-5, kickers, sin desempate por palo), orden de acción en mano a mano y con 3+ jugadores, subida mínima, all-in corto que **no** reabre la acción y all-in que sí, botes secundarios con varios all-ins de distinto importe, empate con ficha sobrante, devolución de apuesta no igualada, final inmediato si todos se retiran, ciega grande corta, vencimiento de turno y **3000 manos aleatorias** verificando la conservación del total de fichas y que no haya cartas repetidas.
-- `test/integration.test.js` — servidor real con **dos sesiones independientes** (cookies y sockets distintos): registro, código `PKR-XXXXXX`, login, recuperación de contraseña, creación y validación de mesa, ingreso por invitación, privacidad de cartas, acciones fuera de turno/duplicadas, **recarga pedida durante la mano y aplicada al terminarla** (sin duplicados), **reconexión** al mismo asiento con las mismas cartas, turno vencido automático, liberación del asiento tras el período de gracia, historial (balances que suman cero, acceso solo para participantes) y reinicio del servidor conservando asientos y fichas.
+- `test/integration.test.js` — servidor real con **dos sesiones independientes** (cookies y sockets distintos): registro solo con usuario y contraseña, código `PKR-XXXXXX`, login, recuperación con código (un solo uso), creación y validación de mesa, ingreso por invitación, privacidad de cartas, acciones fuera de turno/duplicadas, **recarga pedida durante la mano y aplicada al terminarla** (sin duplicados), **reconexión** al mismo asiento con las mismas cartas, turno vencido automático, liberación del asiento tras el período de gracia, historial (balances que suman cero, acceso solo para participantes) y reinicio del servidor conservando asientos y fichas.
 
 Además se probó en Chromium (Playwright) una partida completa entre una sesión de escritorio y otra de celular (iPhone 13): invitación sin sesión → registro → regreso a la mesa, mano jugada hasta el showdown, recarga, recarga de página (reconexión) e historial, sin errores en consola.
 
@@ -97,6 +98,10 @@ Además se probó en Chromium (Playwright) una partida completa entre una sesió
 - El creador inicia la partida; si el creador no está sentado, cualquier jugador sentado puede iniciarla (para que la mesa no quede bloqueada). Su desconexión no detiene el juego.
 - Si el servidor se reinicia a mitad de una mano, esa mano se anula y cada jugador recupera las fichas que tenía al empezarla (queda marcada como "anulada" en el historial).
 
+## Celulares: vertical y horizontal
+
+La mesa se adapta al espacio disponible. En celular **vertical** el panel de acciones queda abajo; en **horizontal** la mesa ocupa la izquierda y las acciones una columna a la derecha. Durante tu turno, "Recargar" y "Abandonar" pasan al menú ⋯ para que los botones de juego entren sin desplazar la pantalla. Al girar el teléfono la mesa se redibuja sola.
+
 ## Mostrar cartas y chat
 
 - **Mostrar mis cartas**: al terminar una mano, cualquier jugador que participó y cuyas cartas no se vieron (por ejemplo, el ganador cuando todos se retiraron, o quien se retiró) puede tocar "👁 Mostrar mis cartas" durante la pausa entre manos. Todos las ven en la mesa y queda registrado en el historial de la mano.
@@ -104,7 +109,6 @@ Además se probó en Chromium (Playwright) una partida completa entre una sesió
 
 ## Pendiente / limitaciones conocidas
 
-- Envío real de correos: requiere configurar `SMTP_URL` (ver arriba).
 - En el showdown se muestran todas las manos que llegan al final (no hay opción de descartar sin mostrar).
 - El chat no se guarda en la base de datos ni tiene moderación o silenciado de jugadores.
 - No hay "sentarse afuera" (sit out) voluntario.

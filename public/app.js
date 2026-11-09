@@ -159,7 +159,7 @@ function shell(active, inner) {
     <div class="userchip">
       <span class="uname">${esc(u.username)}</span><span class="code-pill" title="Tu código de jugador">${esc(u.code)}</span>
       <button class="icon-btn" id="sound-toggle" title="Sonido" aria-label="Activar o desactivar sonido">${sounds.enabled ? '🔊' : '🔇'}</button>
-      <button class="btn small ghost" id="logout">Salir</button>
+      <button class="btn small ghost" id="logout">Cambiar nombre</button>
     </div>
   </header>
   <main class="page">${inner}</main>`;
@@ -183,73 +183,38 @@ function bindShell() {
 }
 
 // ------------------------------------------------------------------ autenticación
-function renderAuth(mode) {
+function renderAuth() {
   const pending = sessionStorage.getItem('afterLogin');
   const invited = !!(pending && pending.startsWith('/m/'));
-  if (!mode) mode = invited ? 'register' : 'login';
   $app.innerHTML = `
   <div class="auth-wrap"><div class="auth-box">
     <div class="auth-hero">
       <div class="suits">♠<span class="r">♥</span>♣<span class="r">♦</span></div>
       <h1>Póker entre Amigos</h1>
       <p class="muted">Texas Hold'em en tiempo real con tus amigos.</p>
-      ${pending && pending.startsWith('/m/') ? '<p class="form-ok">Te invitaron a una mesa. Creá tu cuenta (o iniciá sesión) y te llevamos directo.</p>' : ''}
+      ${invited ? '<p class="form-ok">Te invitaron a una mesa. Escribí tu nombre y te llevamos directo.</p>' : ''}
     </div>
     <div class="card-panel">
-      <div class="seg" role="tablist">
-        <button id="tab-login" class="${mode === 'login' ? 'active' : ''}" role="tab">Iniciar sesión</button>
-        <button id="tab-register" class="${mode === 'register' ? 'active' : ''}" role="tab">Crear cuenta</button>
-      </div>
-      <div id="auth-form"></div>
-    </div>
-    <p class="disclaimer">La app no maneja dinero: solo lleva la cuenta de cada partida y muestra quién le paga a quién.</p>
-  </div></div>`;
-  document.getElementById('tab-login').addEventListener('click', () => renderAuth('login'));
-  document.getElementById('tab-register').addEventListener('click', () => renderAuth('register'));
-  const box = document.getElementById('auth-form');
-  if (mode === 'login') {
-    box.innerHTML = `
       <form id="f" novalidate>
-        <label for="username">Nombre de usuario</label>
-        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" required>
-        <label for="password">Contraseña</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <label for="username">¿Cómo te llamás?</label>
+        <input id="username" name="username" type="text" autocomplete="nickname" autocapitalize="words" maxlength="20" placeholder="Tu nombre en la mesa" required>
+        <div class="hint">Solo tu nombre, sin contraseña. Entre 3 y 20 caracteres.</div>
         <div id="err"></div>
         <button class="btn primary block" style="margin-top:1em">Entrar</button>
       </form>
-      <p class="small" style="text-align:center;margin-top:1em"><a href="#" id="forgot">¿Olvidaste tu contraseña?</a></p>`;
-    document.getElementById('forgot').addEventListener('click', (e) => { e.preventDefault(); renderForgot(); });
-  } else {
-    box.innerHTML = `
-      <form id="f" novalidate>
-        <label for="username">Nombre de usuario</label>
-        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" maxlength="20" required>
-        <div class="hint">Entre 3 y 20 caracteres. Es el nombre que verán tus amigos.</div>
-        <label for="password">Contraseña</label>
-        <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
-        <label for="password2">Repetí la contraseña</label>
-        <input id="password2" name="password2" type="password" autocomplete="new-password" required>
-        <div class="hint">Mínimo 8 caracteres.</div>
-        <div id="err"></div>
-        <button class="btn primary block" style="margin-top:1em">Crear cuenta</button>
-      </form>`;
-  }
+      <p class="muted small" style="text-align:center;margin-top:1em">Si ya jugaste antes, escribí el mismo nombre.</p>
+    </div>
+    <p class="disclaimer">La app no maneja dinero: solo lleva la cuenta de cada partida y muestra quién le paga a quién.</p>
+  </div></div>`;
   const f = document.getElementById('f');
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData(f));
     const err = document.getElementById('err');
-    if (mode === 'register' && data.password !== data.password2) { err.innerHTML = '<div class="form-error">Las contraseñas no coinciden</div>'; return; }
-    delete data.password2;
     const btn = f.querySelector('button');
     btn.disabled = true;
     try {
-      const url = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
-      const r = await api('POST', url, data);
+      const r = await api('POST', '/api/auth/name', { username: f.username.value });
       state.user = r.user;
-      if (mode === 'register') {
-        await showRecoveryCode(r.recoveryCode, `¡Bienvenido/a, ${r.user.username}! Tu código de jugador es ${r.user.code}.`);
-      }
       route();
     } catch (e2) {
       err.innerHTML = `<div class="form-error">${esc(e2.message)}</div>`;
@@ -378,57 +343,13 @@ async function renderLobby() {
         <button class="btn" id="join-btn">Unirse a una mesa</button>
         <button class="btn" id="avatar-btn">🎭 Mi personaje</button>
       </div>
-      <div style="flex-basis:100%" class="${u.guest ? 'hidden' : ''}"><a href="#" class="small" id="recovery-link">🔑 Generar un código de recuperación nuevo</a></div>
     </section>
-    ${u.guest ? `<section class="card-panel guest-note" style="margin-top:1em">
-      <div><b>Estás jugando como invitado.</b> <span class="muted small">Si borrás los datos del navegador o cambiás de dispositivo, perdés esta cuenta.</span></div>
-      <button class="btn small" id="claim-btn">Ponerle contraseña</button></section>` : ''}
     <h2 style="margin-top:1.4em">Tus mesas</h2>
     <div id="tables"><p class="muted">Cargando…</p></div>`);
   document.getElementById('join-btn').addEventListener('click', openJoinModal);
   const reAvatar = () => { const b = document.getElementById('my-avatar'); if (b) b.innerHTML = avatarSvg(state.user.avatar); };
   document.getElementById('avatar-btn').addEventListener('click', () => openAvatarModal(reAvatar));
   document.getElementById('my-avatar').addEventListener('click', () => openAvatarModal(reAvatar));
-  const claim = document.getElementById('claim-btn');
-  claim && claim.addEventListener('click', () => modal(`<h2>Ponerle contraseña a tu cuenta</h2>
-    <p class="muted small">Así podés entrar como <b>${esc(u.username)}</b> desde cualquier dispositivo. Conservás tu código e historial.</p>
-    <form id="clf"><label for="cl-pw">Contraseña</label><input id="cl-pw" type="password" autocomplete="new-password" minlength="8">
-    <label for="cl-pw2">Repetila</label><input id="cl-pw2" type="password" autocomplete="new-password">
-    <div class="hint">Mínimo 8 caracteres.</div><div id="cl-err"></div>
-    <div class="row"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary">Guardar</button></div></form>`,
-  (m, close) => {
-    m.querySelector('#clf').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const pw = m.querySelector('#cl-pw').value;
-      if (pw !== m.querySelector('#cl-pw2').value) { m.querySelector('#cl-err').innerHTML = '<div class="form-error">Las contraseñas no coinciden</div>'; return; }
-      try {
-        const r = await api('POST', '/api/auth/claim', { password: pw });
-        state.user = r.user;
-        close();
-        await showRecoveryCode(r.recoveryCode, 'Listo, tu cuenta ya tiene contraseña.');
-        renderLobby();
-      } catch (e2) { m.querySelector('#cl-err').innerHTML = `<div class="form-error">${esc(e2.message)}</div>`; }
-    });
-  }));
-  document.getElementById('recovery-link').addEventListener('click', (e) => {
-    e.preventDefault();
-    modal(`<h2>Código de recuperación nuevo</h2>
-      <p class="muted small">Si perdiste tu código o creés que alguien lo vio, generá uno nuevo. El anterior deja de funcionar.</p>
-      <form id="rcf"><label for="rc-pw">Tu contraseña actual</label>
-      <input id="rc-pw" type="password" autocomplete="current-password">
-      <div id="rc-err"></div>
-      <div class="row"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary">Generar</button></div></form>`,
-    (m, close) => {
-      m.querySelector('#rcf').addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        try {
-          const r = await api('POST', '/api/auth/recovery-code', { password: m.querySelector('#rc-pw').value });
-          close();
-          await showRecoveryCode(r.recoveryCode);
-        } catch (e2) { m.querySelector('#rc-err').innerHTML = `<div class="form-error">${esc(e2.message)}</div>`; }
-      });
-    });
-  });
   try {
     const { tables } = await api('GET', '/api/tables');
     const box = document.getElementById('tables');
@@ -725,8 +646,10 @@ function renderTable(code, opts = {}) {
   });
   socket.on('table:state', applyState);
   socket.on('table:chat', (m) => addChat(m, false));
+  socket.on('table:accounts', saveLocalAccounts);
   socket.on('table:closed', (m) => {
     closedByOwner = true;
+    if (m.accounts) saveLocalAccounts(m.accounts);
     toast(m.message, 'err');
     if (m.accounts) modal(`${accountsHtml(m.accounts, 'Cuentas finales')}<div class="row"><a class="btn" href="/historial" data-link data-close>Ver historial</a><button class="btn primary" data-close>Cerrar</button></div>`);
   });
@@ -1208,6 +1131,7 @@ function renderTable(code, opts = {}) {
     const r = await call('table:accounts');
     if (!r.ok) { toast(r.error, 'err'); return; }
     if (!r.accounts) { toast('Todavía no hay movimientos en esta mesa'); return; }
+    saveLocalAccounts(r.accounts);
     modal(`${accountsHtml(r.accounts, 'Cuentas de la partida')}<div class="row"><button class="btn primary" data-close>Cerrar</button></div>`);
   }
   document.getElementById('t-accounts').addEventListener('click', showAccounts);
@@ -1299,6 +1223,26 @@ function renderTable(code, opts = {}) {
   };
 }
 
+// ------------------------------------------------------------------ historial local
+// Copia de las cuentas de cada partida en este dispositivo: si el servidor gratuito
+// se reinicia y pierde sus datos, el registro sigue estando acá.
+const LOCAL_KEY = 'pk_historial';
+function localHistory() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}') || {}; } catch { return {}; }
+}
+function saveLocalAccounts(acc) {
+  if (!acc || !acc.sessionId) return;
+  try {
+    const all = localHistory();
+    const prev = all[acc.sessionId];
+    if (prev && prev.endedAt && !acc.endedAt) return; // no pisar una cuenta final con una parcial
+    all[acc.sessionId] = { ...acc, savedAt: new Date().toISOString() };
+    const keys = Object.keys(all).sort((a, b) => String(all[b].startedAt).localeCompare(String(all[a].startedAt)));
+    for (const k of keys.slice(200)) delete all[k];
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(all));
+  } catch { /* almacenamiento lleno o bloqueado */ }
+}
+
 // ------------------------------------------------------------------ cuentas
 /** "Entró con 30 → +20 → +50 → +10" */
 function loadsText(p) {
@@ -1328,8 +1272,16 @@ function accountsHtml(acc, title) {
 // ------------------------------------------------------------------ historial
 async function renderHistory() {
   shell('history', `<h1>Historial de partidas</h1><p class="muted small">Horarios en tu zona horaria (${esc(tz)}).</p><div id="hl"><p class="muted">Cargando…</p></div>`);
+  let sessions = [];
+  try { ({ sessions } = await api('GET', '/api/history')); } catch { sessions = []; }
   try {
-    const { sessions } = await api('GET', '/api/history');
+    const local = localHistory();
+    const seen = new Set(sessions.map((x) => x.id));
+    for (const a of Object.values(local)) {
+      if (seen.has(a.sessionId)) continue;
+      sessions.push({ id: a.sessionId, tableName: a.tableName || 'Mesa', tableCode: a.tableCode || '', startedAt: a.startedAt, endedAt: a.endedAt, hands: a.hands ?? '—', players: a.players.length, local: true });
+    }
+    sessions.sort((x, y) => String(y.startedAt).localeCompare(String(x.startedAt)));
     const box = document.getElementById('hl');
     if (!box) return;
     if (!sessions.length) {
@@ -1341,8 +1293,8 @@ async function renderHistory() {
     box.innerHTML = `<div class="tablewrap"><table class="data"><thead><tr>
       <th>Mesa</th><th>Sesión</th><th>Inicio</th><th>Cierre</th><th class="num">Manos</th><th class="num">Jugadores</th><th></th></tr></thead><tbody>
       ${sessions.map((s) => `<tr><td><b>${esc(s.tableName)}</b><div class="muted small mono">${esc(s.tableCode)}</div></td>
-        <td class="mono small">${esc(s.id.slice(0, 8))}</td>
-        <td>${fmtDate(s.startedAt)}</td><td>${s.endedAt ? fmtDate(s.endedAt) : '<span class="badge live">En curso</span>'}</td>
+        <td class="mono small">${esc(s.id.slice(0, 8))}${s.local ? '<div class="muted small">guardada en este dispositivo</div>' : ''}</td>
+        <td>${fmtDate(s.startedAt)}</td><td>${s.endedAt ? fmtDate(s.endedAt) : s.local ? '<span class="muted small">sin cierre registrado</span>' : '<span class="badge live">En curso</span>'}</td>
         <td class="num">${s.hands}</td><td class="num">${s.players}</td>
         <td><a class="btn small" href="/historial/${esc(s.id)}" data-link>Ver detalle</a></td></tr>`).join('')}
       </tbody></table></div>`;
@@ -1356,6 +1308,18 @@ async function renderSession(id) {
   shell('history', '<p class="muted">Cargando…</p>');
   let s;
   try { ({ session: s } = await api('GET', `/api/history/${id}`)); } catch (e) {
+    const local = localHistory()[id];
+    if (local) {
+      shell('history', `<p><a href="/historial" data-link>← Historial de partidas</a></p>
+        <h1>${esc(local.tableName || 'Mesa')}</h1>
+        <div class="card-panel"><dl class="info-list">
+          <dt>Inicio</dt><dd>${fmtDate(local.startedAt)}</dd>
+          <dt>Cierre</dt><dd>${local.endedAt ? fmtDate(local.endedAt) : 'Sin cierre registrado'}</dd>
+          <dt>Guardada</dt><dd>${fmtDate(local.savedAt)} en este dispositivo</dd>
+        </dl></div>
+        <div class="card-panel" style="margin-top:1em">${accountsHtml(local, 'Cuentas')}</div>`);
+      return;
+    }
     shell('history', `<div class="card-panel empty"><h2>${esc(e.message)}</h2><a class="btn" href="/historial" data-link>Volver</a></div>`);
     return;
   }

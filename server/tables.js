@@ -219,6 +219,7 @@ class Room {
     if (!this.isConnected(user.id)) this.seats[idx].disconnectedAt = Date.now();
     if (this.session.game_started) this.seats[idx].ready = true;
     this.emitEvent({ kind: 'sit', seat: idx });
+    this.pushAccounts();
     this._scheduleNextHand(300);
     this.broadcast();
   }
@@ -270,6 +271,7 @@ class Room {
   }
 
   _applyPendingRebuys() {
+    let applied = false;
     for (const s of this.seats) {
       if (!s || !s.pendingRebuys.length) continue;
       const list = s.pendingRebuys;
@@ -283,9 +285,11 @@ class Room {
             .run(r.amount, this.session.id, s.userId);
         });
         s.stack += r.amount;
+        applied = true;
         this.emitEvent({ kind: 'rebuy', seat: this.seats.indexOf(s), amount: r.amount });
       }
     }
+    if (applied) this.pushAccounts();
   }
 
   leave(user) {
@@ -315,7 +319,9 @@ class Room {
     });
     this.seats[si] = null;
     this.emitEvent({ kind: 'standup', seat: si, username: s.username, reason });
+    const sid = this.session.id;
     if (this.seatedCount() === 0) this._endSession();
+    this.pushAccounts(sid);
   }
 
   close(user) {
@@ -468,6 +474,7 @@ class Room {
     this._applyPendingRebuys();
     this.seats.forEach((s, i) => { if (s && (s.leaving || this._graceExpired(s))) this._standUp(i, s.leaving ? 'leave' : 'disconnect'); });
     this._scheduleNextHand(this.cfg.resultDelayMs);
+    this.pushAccounts();
     this.broadcast();
   }
 
@@ -513,6 +520,13 @@ class Room {
     if (this.chat.length > 60) this.chat.shift();
     this.io.to(this.roomName).emit('table:chat', m);
     return m;
+  }
+
+  /** Manda a todos los de la mesa las cuentas actualizadas (cada uno las guarda en su dispositivo). */
+  pushAccounts(sessionId = this.session && this.session.id) {
+    if (!sessionId) return;
+    const acc = sessionAccounts(this.db, sessionId);
+    if (acc) this.io.to(this.roomName).emit('table:accounts', acc);
   }
 
   /** Cuentas de la sesión: cargas, saldos y quién le paga a quién. */
@@ -641,6 +655,12 @@ class TableManager {
   avatarChanged(id) {
     if (this._avatars) this._avatars.delete(id);
     for (const r of this.rooms.values()) if (r.seatOf(id) >= 0 || r.sockets.has(id)) r.broadcast();
+  }
+
+  /** ¿Tiene alguna pestaña abierta en alguna mesa? */
+  isUserOnline(id) {
+    for (const r of this.rooms.values()) if (r.isConnected(id)) return true;
+    return false;
   }
 
   usernameOf(id) {

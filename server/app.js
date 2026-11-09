@@ -104,6 +104,21 @@ function createApp(overrides = {}) {
   };
   const authLimiter = rateLimiter(30, 10 * 60 * 1000);
 
+  app.post('/api/auth/name', authLimiter, wrap((req, res) => {
+    const name = String((req.body || {}).username || '').trim();
+    const existing = db.prepare('SELECT * FROM users WHERE username = ?').get(name);
+    let user;
+    if (existing) {
+      // Volver con el mismo nombre (otro celular, o después de salir), salvo que esté jugando ahora mismo.
+      if (!existing.is_guest) throw new UserError('Ese nombre ya está en uso. Probá con otro.', 409);
+      if (tables.isUserOnline(existing.id)) throw new UserError('Ese nombre está conectado en este momento. Si sos vos, cerrá la otra pestaña o elegí otro nombre.', 409);
+      user = auth.publicUser(existing);
+    } else {
+      user = auth.enterWithName({ username: name });
+    }
+    setSessionCookie(req, res, user);
+    return { user };
+  }));
   app.post('/api/auth/register', authLimiter, wrap((req, res) => {
     const { user, recoveryCode } = auth.register(req.body || {});
     setSessionCookie(req, res, user);

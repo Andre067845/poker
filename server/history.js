@@ -46,10 +46,15 @@ function sessionPlayers(db, sessionId, ended) {
 }
 
 function sessionAccounts(db, sessionId) {
-  const s = db.prepare('SELECT * FROM table_sessions WHERE id = ?').get(sessionId);
+  const s = db.prepare(`SELECT s.*, t.name AS table_name, t.code AS table_code, t.small_blind, t.big_blind
+    FROM table_sessions s JOIN poker_tables t ON t.id = s.table_id WHERE s.id = ?`).get(sessionId);
   if (!s) return null;
   const players = sessionPlayers(db, s.id, !!s.ended_at);
-  return { sessionId: s.id, startedAt: s.started_at, endedAt: s.ended_at, players, payments: settle(players) };
+  const hands = db.prepare('SELECT COUNT(*) AS n FROM hands WHERE session_id = ? AND ended_at IS NOT NULL').get(s.id).n;
+  return {
+    sessionId: s.id, tableName: s.table_name, tableCode: s.table_code, smallBlind: s.small_blind, bigBlind: s.big_blind,
+    startedAt: s.started_at, endedAt: s.ended_at, hands, players, payments: settle(players), savedAt: new Date().toISOString(),
+  };
 }
 
 function createHistory(db) {

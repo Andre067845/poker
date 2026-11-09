@@ -517,3 +517,45 @@ test('mesa sin ciegas, personaje y cuentas en vivo', async (t) => {
   assert.ok(Array.isArray(r.data.session.payments));
   assert.equal(r.data.session.players.find((p) => p.username === 'andre').reloadCount, 3);
 });
+
+test('entrar solo con nombre y recibir las cuentas tras cada mano', async (t) => {
+  const inst = createApp({ dbFile: ':memory:', resultDelayMs: 60000, graceMs: 60000, sweepMs: 1000 });
+  const base = `http://127.0.0.1:${await inst.listen(0)}`;
+  const a = client(base); const b = client(base);
+  let r = await a.post('/api/auth/name', { username: 'Andre' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  r = await client(base).post('/api/auth/name', { username: 'andre' });
+  assert.equal(r.status, 200, 'mientras no esté jugando, se puede volver a entrar con el mismo nombre');
+  assert.equal(r.data.user.username, 'Andre');
+  r = await b.post('/api/auth/name', { username: 'Beto' });
+  assert.equal(r.status, 200);
+  r = await a.get('/api/me');
+  assert.equal(r.data.user.username, 'Andre', 'queda guardado en el navegador');
+  const code = (await a.post('/api/tables', { name: 'Viernes', maxPlayers: 4, startingStack: 30, useBlinds: false, turnSeconds: 30, allowRebuy: true, maxBuyin: 300 })).data.table.code;
+  const sa = a.socket(); const sb = b.socket();
+  t.after(async () => { sa.close(); sb.close(); await inst.close(); });
+  const accA = []; const accB = [];
+  sa.on('table:accounts', (x) => accA.push(x)); sb.on('table:accounts', (x) => accB.push(x));
+  await Promise.all([sa.ready, sb.ready]);
+  await sa.call('table:join', { code }); await sb.call('table:join', { code });
+  r = await client(base).post('/api/auth/name', { username: 'Andre' });
+  assert.equal(r.status, 409, 'si está conectado, nadie puede entrar con su nombre');
+  await sa.call('table:sit', { amount: 30, requestId: 'andre-sit-1' });
+  await sb.call('table:sit', { amount: 30, requestId: 'beto-sit-01' });
+  await sb.call('table:rebuy', { amount: 20, requestId: 'beto-rb-001' });
+  await until(() => accB.some((x) => x.players.some((p) => p.username === 'Beto' && p.reloadCount === 1)), 2000, 'cuentas con la carga');
+  assert.equal(accA[accA.length - 1].tableName, 'Viernes');
+  await sa.call('table:ready', { ready: true }); await sb.call('table:ready', { ready: true });
+  await sa.call('table:start');
+  await until(() => sa.state && sa.state.hand && sb.state && sb.state.hand, 2000, 'mano');
+  const n = accA.length;
+  const turn = sa.state.hand.turnSeat === sa.state.mySeat ? sa : sb;
+  await until(() => turn.state.hand && turn.state.hand.legal, 2000, 'turno');
+  await turn.call('table:action', { type: 'fold', turnId: turn.state.hand.turnId, actionId: rid() });
+  await until(() => accA.length > n, 2000, 'cuentas tras la mano');
+  const last = accA[accA.length - 1];
+  assert.equal(last.players.reduce((x, p) => x + p.balance, 0), 0);
+  // el último que se levanta cierra la sesión: llega la cuenta final
+  await sa.call('table:leave'); await sb.call('table:leave');
+  await until(() => accB.some((x) => x.endedAt), 2000, 'cuenta final');
+});

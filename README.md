@@ -123,6 +123,12 @@ Además se probó en Chromium (Playwright) una partida completa entre una sesió
 - El creador inicia la partida; si el creador no está sentado, cualquier jugador sentado puede iniciarla (para que la mesa no quede bloqueada). Su desconexión no detiene el juego.
 - Si el servidor se reinicia a mitad de una mano, esa mano se anula y cada jugador recupera las fichas que tenía al empezarla (queda marcada como "anulada" en el historial).
 
+## Entrar solo con un nombre
+
+Al abrir la web (o un enlace de invitación) solo se pide un **nombre**: sin contraseña ni correo. La sesión queda guardada en el navegador. Para volver desde otro celular, o después de tocar "Cambiar nombre", se escribe el mismo nombre: se puede entrar con él siempre que ese nombre no esté conectado jugando en ese momento.
+
+**El registro de cada partida se guarda siempre**: después de cada mano, de cada carga y al terminar la partida, el servidor manda a todos los de la mesa las cuentas (con cuánto entró cada uno, cada carga, con cuánto quedó y quién le paga a quién). Cada jugador guarda una copia en su propio dispositivo, así que el historial no se pierde aunque el servidor gratuito se reinicie y pierda sus datos. En "Historial de partidas" aparecen las del servidor y las guardadas en el dispositivo.
+
 ## Mesa, personajes y cuentas
 
 - **Ciegas opcionales**: al crear la mesa se pregunta si se juega con small blind y big blind; solo si la respuesta es sí se piden los montos. Sin ciegas nadie pone nada al empezar y la apuesta mínima es Bs 1.

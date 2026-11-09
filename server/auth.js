@@ -125,6 +125,28 @@ function createAuth(db) {
   }
 
   /** Convierte un invitado en cuenta con contraseña (conserva código e historial). */
+  /**
+   * Entrar solo con un nombre (sin contraseña). La sesión queda guardada en el navegador.
+   * Los nombres son únicos: si ya existe, hay que elegir otro.
+   */
+  function enterWithName({ username }) {
+    username = String(username || '').trim();
+    if (!USERNAME_RE.test(username)) throw new UserError('El nombre debe tener entre 3 y 20 caracteres (letras, números, punto, guion o guion bajo)');
+    if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) throw new UserError('Ese nombre ya lo está usando otra persona. Probá con otro (por ejemplo, agregale un número).', 409);
+    const unusable = `guest$${crypto.randomBytes(24).toString('hex')}`;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        const r = db.prepare('INSERT INTO users (username, password_hash, is_guest, code, created_at) VALUES (?,?,1,?,?)')
+          .run(username, unusable, `PKR-${randomCode(6)}`, now());
+        return publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(r.lastInsertRowid));
+      } catch (e) {
+        if (!/UNIQUE/.test(e.message)) throw e;
+        if (/username/.test(e.message)) throw new UserError('Ese nombre ya lo está usando otra persona. Probá con otro.', 409);
+      }
+    }
+    throw new Error('No se pudo generar un código único');
+  }
+
   function claimGuest(userId, password) {
     validatePassword(password);
     const u = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
@@ -135,7 +157,7 @@ function createAuth(db) {
     return { user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)), recoveryCode };
   }
 
-  return { claimGuest, register, login, createSession, userFromToken, destroySession, recoverWithCode, regenerateRecovery, publicUser };
+  return { enterWithName, claimGuest, register, login, createSession, userFromToken, destroySession, recoverWithCode, regenerateRecovery, publicUser };
 }
 
 module.exports = { createAuth, UserError, randomCode, hashPassword, verifyPassword };

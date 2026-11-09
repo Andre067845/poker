@@ -1,0 +1,24 @@
+# Blueprint de Render: publica la app con un clic desde GitHub.
+# Render -> New -> Blueprint -> elegí este repositorio.
+services:
+  - type: web
+    name: poker-entre-amigos
+    runtime: node
+    plan: starter          # necesario para tener disco persistente (cuentas e historial)
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22.13.1"
+      - key: DB_FILE
+        value: /var/data/poker.db
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: TRUST_PROXY
+        value: "1"
+    disk:
+      name: poker-data
+      mountPath: /var/data
+      sizeGB: 1

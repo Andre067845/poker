@@ -122,6 +122,7 @@ function createApp(overrides = {}) {
     return { user, recoveryCode };
   }));
   app.post('/api/auth/recovery-code', authLimiter, requireUser, wrap((req) => ({ recoveryCode: auth.regenerateRecovery(req.user.id, (req.body || {}).password) })));
+  app.get('/healthz', (req, res) => res.json({ ok: true }));
   app.get('/api/me', (req, res) => res.json({ user: req.user || null }));
 
   // Mesas

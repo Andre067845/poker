@@ -59,9 +59,24 @@ Abrí `http://localhost:3000`. Para jugar con amigos a distancia el servidor tie
 
 Al crear la cuenta se muestra **una sola vez** un código de recuperación (`XXXX-XXXX-XXXX-XXXX`) y el usuario debe confirmar que lo guardó. Con su usuario y ese código puede elegir una contraseña nueva desde "¿Olvidaste tu contraseña?"; en ese momento se cierran sus otras sesiones y se le entrega un código nuevo (el anterior deja de servir). Desde el lobby puede generar otro código ingresando su contraseña actual. Los códigos se guardan cifrados (scrypt), igual que las contraseñas. Si alguien pierde la contraseña y el código, la cuenta no se puede recuperar.
 
-## Despliegue
+## Publicarla en internet (Render, paso a paso)
 
-Cualquier hosting que ejecute Node.js 22 con **disco persistente** y soporte WebSockets (Render, Railway, Fly.io, un VPS…). Hay un `Dockerfile`:
+El repositorio incluye `render.yaml`, así que Render configura todo solo.
+
+1. Creá una cuenta en https://render.com (podés entrar con tu cuenta de GitHub).
+2. En el panel: **New → Blueprint**.
+3. Conectá GitHub y elegí el repositorio **andre067845/poker**. Si te pide rama, elegí aquella donde está este código (o primero uní la rama a `main`).
+4. Render lee `render.yaml` y muestra el servicio **poker-entre-amigos** con un disco de 1 GB. Tocá **Apply** / **Deploy Blueprint**.
+5. Esperá a que termine (unos minutos). Render te da una dirección como `https://poker-entre-amigos.onrender.com`.
+6. Abrila, creá tu cuenta, creá una mesa y compartí el enlace de invitación (`https://…onrender.com/m/CÓDIGO`). Cualquiera con el enlace crea su cuenta (usuario y contraseña) y entra directo a la mesa.
+
+Costo: el plan **Starter** (≈ 7 USD/mes) es necesario porque incluye el **disco persistente** donde se guardan cuentas, mesas e historial. El plan gratuito no tiene disco: la app funcionaría, pero se borraría todo en cada reinicio y el servidor se "duerme" tras 15 minutos sin uso.
+
+Cada vez que se suben cambios a la rama conectada, Render vuelve a publicar solo (`autoDeploy`). Si querés un dominio propio, se agrega en *Settings → Custom Domains*.
+
+### Otras opciones
+
+Cualquier hosting con Node.js 22, **disco persistente** y WebSockets sirve (Railway, Fly.io, un VPS). Hay un `Dockerfile`:
 
 ```bash
 docker build -t poker .
@@ -71,7 +86,7 @@ docker build -t poker .
 docker run -p 3000:3000 -v poker-data:/data -e COOKIE_SECURE=1 -e TRUST_PROXY=1 poker
 ```
 
-Usá una sola instancia (el estado de las manos en curso vive en memoria del proceso; los datos persistentes están en SQLite). Poné HTTPS delante (lo da el hosting o un proxy como Caddy/Nginx).
+Usá una sola instancia (el estado de las manos en curso vive en la memoria del proceso; lo persistente está en SQLite) y poné HTTPS delante.
 
 ## Pruebas
 

@@ -1,4 +1,4 @@
-/* Póker entre Amigos — cliente. Sin dependencias salvo socket.io. */
+/* wakapoker — cliente. Sin dependencias salvo socket.io. */
 import { sounds } from './sound.js';
 import { avatarSvg, handsHtml, LABELS, VALUE_LABELS, DEALER } from './avatar.js';
 
@@ -150,7 +150,7 @@ function shell(active, inner) {
   const u = state.user;
   $app.innerHTML = `
   <header class="topbar">
-    <a class="brand" href="/" data-link>♠ Póker <span>entre Amigos</span></a>
+    <a class="brand" href="/" data-link>♠ waka<span>poker</span></a>
     <nav class="tabs" aria-label="Secciones">
       <a class="tab ${active === 'lobby' ? 'active' : ''}" href="/" data-link>Mesas</a>
       <a class="tab ${active === 'history' ? 'active' : ''}" href="/historial" data-link>Historial de partidas</a>
@@ -190,7 +190,7 @@ function renderAuth() {
   <div class="auth-wrap"><div class="auth-box">
     <div class="auth-hero">
       <div class="suits">♠<span class="r">♥</span>♣<span class="r">♦</span></div>
-      <h1>Póker entre Amigos</h1>
+      <h1>wakapoker</h1>
       <p class="muted">Texas Hold'em en tiempo real con tus amigos.</p>
       ${invited ? '<p class="form-ok">Te invitaron a una mesa. Escribí tu nombre y te llevamos directo.</p>' : ''}
     </div>

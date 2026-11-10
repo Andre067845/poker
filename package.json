@@ -1,5 +1,5 @@
 {
-  "name": "poker-entre-amigos",
+  "name": "wakapoker",
   "version": "1.0.0",
   "description": "Texas Hold'em No Limit multijugador en tiempo real con fichas virtuales gratuitas",
   "main": "server/index.js",

@@ -13,7 +13,7 @@ const { pgStore, restoreSnapshot } = require('./persist');
   }
   const instance = createApp(overrides);
   const port = await instance.listen();
-  console.log(`Póker entre Amigos escuchando en http://localhost:${port}`);
+  console.log(`wakapoker escuchando en http://localhost:${port}`);
 
   let closing = false;
   const shutdown = () => {

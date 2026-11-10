@@ -1,4 +1,4 @@
-# Póker entre Amigos
+# wakapoker
 
 Aplicación web para jugar **Texas Hold'em No Limit** en tiempo real con amigos, desde el celular o la computadora, entrando por un enlace de invitación. Interfaz en español, mesa 2D.
 

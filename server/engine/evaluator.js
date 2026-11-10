@@ -97,4 +97,30 @@ function describe({ category, ranks }) {
   }
 }
 
-module.exports = { evaluate5, bestHand, CATEGORY, CATEGORY_NAMES, combinations };
+/** Cartas que forman la jugada (sin los kickers): p. ej. las dos de la pareja. */
+function coreCards(best) {
+  const c = best.category;
+  if (c === CATEGORY.STRAIGHT || c === CATEGORY.FLUSH || c === CATEGORY.FULL_HOUSE || c === CATEGORY.STRAIGHT_FLUSH) return best.cards.slice();
+  if (c === CATEGORY.HIGH_CARD) return best.cards.filter((x) => rankValue(x) === best.ranks[0]).slice(0, 1);
+  const counts = new Map();
+  for (const x of best.cards) counts.set(rankValue(x), (counts.get(rankValue(x)) || 0) + 1);
+  return best.cards.filter((x) => counts.get(rankValue(x)) >= 2);
+}
+
+/**
+ * Juego actual de un jugador con las cartas que hay a la vista.
+ * Antes del flop (2 cartas) solo puede ser pareja o carta alta.
+ */
+function currentHand(hole, board) {
+  const all = hole.concat(board);
+  if (all.length >= 5) {
+    const best = bestHand(all);
+    return { category: best.category, name: best.name, core: coreCards(best) };
+  }
+  const [a, b] = hole.map(rankValue);
+  if (a === b) return { category: CATEGORY.PAIR, name: `Pareja de ${RANK_PLURAL[a]}`, core: hole.slice() };
+  const hi = Math.max(a, b);
+  return { category: CATEGORY.HIGH_CARD, name: `Carta alta: ${RANK_SINGULAR[hi]}`, core: hole.filter((x) => rankValue(x) === hi) };
+}
+
+module.exports = { evaluate5, bestHand, currentHand, coreCards, CATEGORY, CATEGORY_NAMES, combinations };

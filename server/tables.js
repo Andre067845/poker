@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const { now } = require('./db');
 const { randomCode, UserError } = require('./auth');
 const { Hand, GameError } = require('./engine/holdem');
+const { currentHand } = require('./engine/evaluator');
 const { parseAvatar } = require('./avatar');
 const { sessionAccounts } = require('./history');
 
@@ -599,6 +600,11 @@ class Room {
         turnId: this.turnId,
         deadline: this.turnDeadline,
         legal: mySeat >= 0 ? h.legalActions(mySeat) : null,
+        // Solo el propio jugador recibe su juego actual (calculado con sus cartas y las de la mesa).
+        myHand: (() => {
+          const me = mySeat >= 0 ? h.player(mySeat) : null;
+          return me && !me.folded ? currentHand(me.hole, h.board) : null;
+        })(),
       };
     }
     return {

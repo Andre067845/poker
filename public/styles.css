@@ -447,3 +447,9 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   .dealer-fig { width: 28px; }
   .dealer-tag { display: none; }
 }
+
+/* juego actual del jugador */
+.my-hand-pill { display: inline-block; margin-top: 3px; background: rgba(242,193,78,.14); border: 1px solid var(--accent); color: var(--text); border-radius: 999px; padding: .15em .7em; font-size: .9rem; }
+.my-hand-pill b { color: var(--accent); }
+.card.core { box-shadow: 0 0 0 3px rgba(242,193,78,.85), 0 2px 6px rgba(0,0,0,.45); }
+@media (max-width: 700px) { .my-hand-pill { font-size: .8rem; padding: .1em .55em; } }

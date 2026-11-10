@@ -133,6 +133,7 @@ Al abrir la web (o un enlace de invitación) solo se pide un **nombre**: sin con
 
 - **Ciegas**: al crear la mesa se pregunta "¿Cómo se juega?": **Con SB y BB** (se piden los dos montos) o **Solo SB** (se pide la SB, normalmente Bs 1). Con "Solo SB" la pone siempre el jugador a la izquierda del dealer, no hay big blind, los demás deben igualar la SB y quien la puso tiene la opción al final de la ronda; la apuesta mínima es la SB.
 - **Crupier y personajes**: un crupier reparte las cartas (se ven volar hacia cada jugador) y da vuelta el flop, el turn y el river. Cada jugador es un personaje (cara y manos): al apostar mete fichas en la mesa y al pasar golpea la mesa dos veces. Antes de entrar a una mesa (y desde el lobby, en "Mi personaje") se elige color de piel, pelo, sombrero, gafas, barba y camisa.
+- **Tu juego en todo momento**: durante la mano cada jugador ve "Tenés: …" con su mejor combinación actual (por ejemplo, con A y 5 y en la mesa 2-3-4: "Escalera al Cinco"), y se resaltan las cartas que la forman. Antes del flop muestra si tiene pareja o su carta alta. Cada uno ve solo el suyo.
 - **Cuentas**: el botón 💰 de la mesa muestra para todos con cuánto entró cada uno, cada carga en orden ("Entró con 30 → +20 → +50 → +10"), cuántas veces cargó, con cuánto quedó y **quién le paga a quién**. Al cerrar la mesa, todos reciben las cuentas finales, que quedan en el historial de partidas. La app no maneja dinero: solo lleva la cuenta.
 
 ## Celulares: vertical y horizontal

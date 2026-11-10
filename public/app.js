@@ -761,7 +761,8 @@ function renderTable(code, opts = {}) {
     let center = '<div class="board">';
     for (let i = 0; i < 5; i++) {
       if (!board[i]) { center += '<div class="slot"></div>'; continue; }
-      const extra = bestCards.size && !bestCards.has(board[i]) ? 'dim' : bestCards.has(board[i]) ? 'win' : '';
+      const myCore = h && h.myHand ? h.myHand.core : [];
+      const extra = bestCards.size && !bestCards.has(board[i]) ? 'dim' : bestCards.has(board[i]) ? 'win' : myCore.includes(board[i]) ? 'core' : '';
       const anim = i >= boardFrom ? ` flip-in" style="animation-delay:${(i - boardFrom) * 160}ms` : '';
       center += cardHtml(board[i], extra + anim);
     }
@@ -971,7 +972,8 @@ function renderTable(code, opts = {}) {
     const me = st.mySeat != null ? st.seats[st.mySeat] : null;
     const L = h && me && h.turnSeat === st.mySeat ? h.legal : null;
     const key = JSON.stringify([st.mySeat, h && h.number, h && h.turnId, !!L, me && me.cards, me && me.stack, me && me.ready,
-      st.gameStarted, st.canStart, me && me.pendingRebuy, st.table.status, h && h.turnSeat, me && me.leaving, me && me.folded, st.canShowCards]);
+      st.gameStarted, st.canStart, me && me.pendingRebuy, st.table.status, h && h.turnSeat, me && me.leaving, me && me.folded, st.canShowCards,
+      h && h.myHand && h.myHand.name, h && h.board.length]);
     if (key === actionKey) return;
     actionKey = key;
 
@@ -988,8 +990,10 @@ function renderTable(code, opts = {}) {
       return;
     }
 
-    const myCards = me.cards ? me.cards.map((c) => cardHtml(c)).join('') : '';
+    const core = h && h.myHand ? h.myHand.core : [];
+    const myCards = me.cards ? me.cards.map((c) => cardHtml(c, core.includes(c) ? 'core' : '')).join('') : '';
     let info = `<div class="big">${fmt(me.stack)}</div>`;
+    if (h && h.myHand) info += `<div class="my-hand-pill" aria-live="polite">🃏 Tenés: <b>${esc(h.myHand.name)}</b></div>`;
     if (h && me.waiting) info += '<div class="muted small">Vas a recibir cartas en la próxima mano.</div>';
     else if (h && me.folded) info += '<div class="muted small">Te retiraste de esta mano.</div>';
     else if (h && !L) {

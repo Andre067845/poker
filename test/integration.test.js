@@ -148,6 +148,10 @@ test('partida completa entre dos sesiones independientes', async (t) => {
   const aSeat = sa.state.mySeat; const bSeat = sb.state.mySeat;
   assert.notEqual(aSeat, bSeat);
 
+  // cada uno ve su propio juego
+  assert.ok(sa.state.hand.myHand && sa.state.hand.myHand.name, 'A ve su juego');
+  assert.ok(sb.state.hand.myHand && sb.state.hand.myHand.name, 'B ve su juego');
+  assert.ok(sa.state.hand.myHand.core.every((c) => sa.state.seats[aSeat].cards.includes(c) || sa.state.hand.board.includes(c)), 'solo con sus cartas y las de la mesa');
   // privacidad de cartas
   const aMine = sa.state.seats[aSeat].cards;
   assert.equal(aMine.length, 2);

@@ -81,6 +81,23 @@ test('evaluador: kickers y sin desempate por palo', () => {
   assert.equal(bestHand(['2c', '3d', ...board]).value, bestHand(['4h', '5h', ...board]).value);
 });
 
+test('juego actual del jugador: lo que se le muestra durante la mano', () => {
+  const { currentHand } = require('../server/engine/evaluator');
+  let r = currentHand(['As', '5d'], ['2c', '3h', '4s']);
+  assert.equal(r.name, 'Escalera al Cinco', 'A y 5 con 2-3-4 en la mesa');
+  assert.equal(r.core.length, 5);
+  assert.equal(currentHand(['Ah', 'Ad'], []).name, 'Pareja de Ases', 'antes del flop');
+  assert.equal(currentHand(['Kh', '7d'], []).name, 'Carta alta: Rey');
+  r = currentHand(['9h', '9d'], ['9s', '2c', '5h']);
+  assert.equal(r.name, 'Trío de Nueves');
+  assert.deepEqual(r.core.sort(), ['9d', '9h', '9s']);
+  r = currentHand(['Kh', '7d'], ['Kc', '2s', '9h', 'Jd']);
+  assert.equal(r.name, 'Pareja de Reyes');
+  assert.equal(r.core.length, 2, 'se resaltan solo las dos de la pareja');
+  assert.equal(currentHand(['2h', '7h'], ['Kh', '9h', '4h']).name, 'Color al Rey');
+  assert.equal(currentHand(['Qs', 'Qd'], ['Qh', '4c', '4d']).name, 'Full de Reinas y Cuatros');
+});
+
 // ---------------------------------------------------------------- Orden y ciegas
 test('mano a mano: el botón pone la ciega chica, actúa primero preflop y último después', () => {
   const players = [{ seat: 0, userId: 'a', stack: 1000 }, { seat: 3, userId: 'b', stack: 1000 }];

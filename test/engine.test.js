@@ -342,6 +342,36 @@ test('sin ciegas: nadie pone nada, habla el de la izquierda del botón y la apue
   assert.equal(hu.street, 'flop');
 });
 
+test('solo SB: la pone el de la izquierda del botón, no hay BB y tiene la opción al final', () => {
+  const players = [0, 1, 2].map((s) => ({ seat: s, userId: s, stack: 100 }));
+  const h = new Hand({ players, dealerSeat: 0, smallBlind: 1, bigBlind: 0 });
+  assert.equal(h.sbSeat, 1);
+  assert.equal(h.bbSeat, null);
+  assert.equal(h.player(1).bet, 1);
+  assert.equal(h.player(2).bet, 0);
+  assert.equal(h.turnSeat, 2, 'habla primero el de la izquierda de la SB');
+  let L = h.legalActions(2);
+  assert.ok(L.canCall && !L.canCheck);
+  assert.equal(L.toCall, 1);
+  assert.equal(L.minTo, 2, 'subida mínima: SB + SB');
+  h.act(2, { type: 'call' });
+  h.act(0, { type: 'call' });
+  assert.equal(h.turnSeat, 1, 'la SB tiene la opción');
+  L = h.legalActions(1);
+  assert.ok(L.canCheck && L.canRaise);
+  h.act(1, { type: 'check' });
+  assert.equal(h.street, 'flop');
+  assert.equal(h.legalActions(h.turnSeat).minTo, 1, 'apuesta mínima = SB');
+  // mano a mano: también la pone el de la izquierda del botón (el que no es botón)
+  const hu = new Hand({ players: players.slice(0, 2), dealerSeat: 0, smallBlind: 1, bigBlind: 0 });
+  assert.equal(hu.sbSeat, 1);
+  assert.equal(hu.player(0).bet, 0);
+  assert.equal(hu.turnSeat, 0);
+  hu.act(0, { type: 'fold' });
+  assert.ok(hu.finished);
+  assert.equal(hu.player(1).stack, 100, 'recupera su SB no igualada');
+});
+
 // ---------------------------------------------------------------- Conservación (fuzz)
 test('conservación de fichas en 3000 manos aleatorias', () => {
   const rnd = (n) => Math.floor(Math.random() * n);
@@ -350,8 +380,8 @@ test('conservación de fichas en 3000 manos aleatorias', () => {
     const seats = shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8]).slice(0, n);
     const players = seats.map((s) => ({ seat: s, userId: s, stack: 1 + rnd(rnd(2) ? 60 : 2000) }));
     const start = players.reduce((s, p) => s + p.stack, 0);
-    const noBlinds = rnd(4) === 0;
-    const h = new Hand({ players, dealerSeat: seats[rnd(n)], smallBlind: noBlinds ? 0 : 5, bigBlind: noBlinds ? 0 : 10 });
+    const mode = rnd(3); // 0: SB y BB, 1: solo SB, 2: sin ciegas
+    const h = new Hand({ players, dealerSeat: seats[rnd(n)], smallBlind: mode === 2 ? 0 : (mode === 1 ? 1 : 5), bigBlind: mode === 0 ? 10 : 0 });
     let guard = 0;
     while (!h.finished) {
       if (++guard > 500) throw new Error('mano infinita');

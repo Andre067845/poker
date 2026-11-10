@@ -33,10 +33,12 @@ class Hand {
       hole: [], lastAction: null,
     }));
     this.blinds = bigBlind > 0;
-    this.sb = this.blinds ? smallBlind : 0;
+    // "Solo SB": hay small blind pero no big blind.
+    this.sbOnly = !this.blinds && smallBlind > 0;
+    this.sb = this.blinds || this.sbOnly ? smallBlind : 0;
     this.bb = this.blinds ? bigBlind : 0;
-    // Apuesta mínima: la big blind, o 1 (o la indicada) si se juega sin ciegas.
-    this.minBet = this.blinds ? bigBlind : Math.max(1, minBet || 1);
+    // Apuesta mínima: la big blind; con "solo SB", la SB; sin ciegas, 1 (o la indicada).
+    this.minBet = this.blinds ? bigBlind : this.sbOnly ? smallBlind : Math.max(1, minBet || 1);
     this.deck = deck ? deck.slice() : shuffledDeck();
     if (new Set(this.deck).size !== this.deck.length) throw new Error('Mazo con cartas repetidas');
     this.burned = [];
@@ -53,7 +55,11 @@ class Hand {
     const n = this.players.length;
     this.dealerIdx = this.players.findIndex((p) => p.seat === dealerSeat);
     if (this.dealerIdx < 0) throw new Error('El botón debe estar en un jugador activo');
-    if (n === 2) {
+    if (this.sbOnly) {
+      // Solo SB: la pone siempre el jugador a la izquierda del botón (también mano a mano).
+      this.sbIdx = (this.dealerIdx + 1) % n;
+      this.bbIdx = -1;
+    } else if (n === 2) {
       // Mano a mano: el botón pone la ciega chica y actúa primero antes del flop.
       this.sbIdx = this.dealerIdx;
       this.bbIdx = (this.dealerIdx + 1) % n;
@@ -65,7 +71,7 @@ class Hand {
   }
 
   get dealerSeat() { return this.players[this.dealerIdx].seat; }
-  get sbSeat() { return this.blinds ? this.players[this.sbIdx].seat : null; }
+  get sbSeat() { return this.blinds || this.sbOnly ? this.players[this.sbIdx].seat : null; }
   get bbSeat() { return this.blinds ? this.players[this.bbIdx].seat : null; }
   get turnSeat() { return this.finished || this.turnIdx < 0 ? null : this.players[this.turnIdx].seat; }
 
@@ -86,6 +92,19 @@ class Hand {
 
   _start() {
     const n = this.players.length;
+    if (this.sbOnly) {
+      const sbP = this.players[this.sbIdx];
+      const sbAmt = this._put(sbP, this.sb);
+      sbP.lastAction = { type: 'sb', amount: sbAmt };
+      this.log.push({ street: 'preflop', seat: sbP.seat, type: 'sb', amount: sbAmt });
+      // Los demás deben igualar la SB completa; quien la puso tiene la opción al final, como la BB.
+      this.currentBet = this.sb;
+      this.minRaise = this.sb;
+      this._deal();
+      this.turnIdx = this._nextNeeding(this.sbIdx);
+      if (this.turnIdx < 0) this._endStreet();
+      return;
+    }
     if (!this.blinds) {
       // Sin ciegas: nadie pone nada al empezar y habla primero el de la izquierda del botón.
       this.currentBet = 0;

@@ -13,7 +13,7 @@ const LIMITS = {
 };
 
 function minBuyinFor(t) {
-  return Math.max(1, Math.min(t.starting_stack, (t.big_blind || 1) * 10));
+  return Math.max(1, Math.min(t.starting_stack, (t.big_blind || t.small_blind || 1) * 10));
 }
 
 function validateTableSettings(input) {
@@ -24,12 +24,14 @@ function validateTableSettings(input) {
     return v;
   };
   if (name.length < 1 || name.length > 40) throw new UserError('El nombre de la mesa debe tener entre 1 y 40 caracteres');
-  const useBlinds = input.useBlinds !== false;
+  // blindMode: 'both' (SB y BB), 'sb' (solo SB, la pone el de la izquierda del botón) o 'none'.
+  const blindMode = ['both', 'sb', 'none'].includes(input.blindMode) ? input.blindMode : (input.useBlinds === false ? 'none' : 'both');
+  const useBlinds = blindMode === 'both';
   const s = {
     name,
     max_players: num('maxPlayers'),
     starting_stack: num('startingStack'),
-    small_blind: useBlinds ? num('smallBlind') : 0,
+    small_blind: blindMode === 'none' ? 0 : num('smallBlind'),
     big_blind: useBlinds ? num('bigBlind') : 0,
     turn_seconds: num('turnSeconds'),
     allow_rebuy: input.allowRebuy ? 1 : 0,
@@ -40,6 +42,9 @@ function validateTableSettings(input) {
     if (s.small_blind < 1) throw new UserError('La small blind debe ser al menos 1');
     if (s.big_blind < s.small_blind) throw new UserError('La big blind no puede ser menor que la small blind (lo habitual es el doble)');
     if (s.starting_stack < s.big_blind * 10) throw new UserError(`La entrada inicial debe ser al menos 10 big blinds (Bs ${s.big_blind * 10})`);
+  } else if (blindMode === 'sb') {
+    if (s.small_blind < 1) throw new UserError('La small blind debe ser al menos 1');
+    if (s.starting_stack < s.small_blind * 10) throw new UserError(`La entrada inicial debe ser al menos 10 small blinds (Bs ${s.small_blind * 10})`);
   } else if (s.starting_stack < 10) {
     throw new UserError('La entrada inicial debe ser al menos Bs 10');
   }
@@ -53,6 +58,7 @@ function publicTable(t) {
   return {
     id: t.id, code: t.code, name: t.name, ownerId: t.owner_id, status: t.status,
     maxPlayers: t.max_players, startingStack: t.starting_stack, smallBlind: t.small_blind, useBlinds: t.big_blind > 0,
+    blindMode: t.big_blind > 0 ? 'both' : t.small_blind > 0 ? 'sb' : 'none',
     bigBlind: t.big_blind, turnSeconds: t.turn_seconds, allowRebuy: !!t.allow_rebuy,
     maxBuyin: t.max_buyin, minBuyin: minBuyinFor(t), createdAt: t.created_at,
   };
@@ -632,6 +638,16 @@ class TableManager {
     'Te recomiendo pagar',
     'Cagón',
     '¡Escalera!',
+    '¡Faroleada histórica!',
+    '¡Color!',
+    '¡Trica!',
+    '¡Masivo!',
+    'Checkea',
+    'Foldea',
+    'Si subís te pago',
+    'Resubo',
+    'No te voy a pagar',
+    '¡Te chingué!',
   ];
 
   constructor({ db, io, config }) {

@@ -328,7 +328,9 @@ test('mostrar cartas voluntariamente y chat de la mesa', async (t) => {
   sa.on('table:chat', (m) => chatA.push(m)); sb.on('table:chat', (m) => chatB.push(m));
   await Promise.all([sa.ready, sb.ready]);
   const joinA = await sa.call('table:join', { code });
-  assert.equal(joinA.quickChat.length, 5);
+  assert.equal(joinA.quickChat.length, 15);
+  assert.ok(joinA.quickChat.includes('¡Faroleada histórica!'));
+  assert.ok(joinA.quickChat.includes('¡Te chingué!'));
   assert.ok(joinA.quickChat.includes('¿Vas de farol, verdad?'));
   await sb.call('table:join', { code });
 
@@ -558,4 +560,19 @@ test('entrar solo con nombre y recibir las cuentas tras cada mano', async (t) =>
   // el último que se levanta cierra la sesión: llega la cuenta final
   await sa.call('table:leave'); await sb.call('table:leave');
   await until(() => accB.some((x) => x.endedAt), 2000, 'cuenta final');
+});
+
+test('mesa con solo SB', async () => {
+  const inst = createApp({ dbFile: ':memory:' });
+  const base = `http://127.0.0.1:${await inst.listen(0)}`;
+  const a = client(base);
+  await a.post('/api/auth/name', { username: 'Andre' });
+  let r = await a.post('/api/tables', { name: 'SB', maxPlayers: 6, startingStack: 5, blindMode: 'sb', smallBlind: 1, turnSeconds: 30, allowRebuy: true, maxBuyin: 100 });
+  assert.equal(r.status, 400, 'entrada mínima: 10 SB');
+  r = await a.post('/api/tables', { name: 'SB', maxPlayers: 6, startingStack: 30, blindMode: 'sb', smallBlind: 1, turnSeconds: 30, allowRebuy: true, maxBuyin: 100 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.table.blindMode, 'sb');
+  assert.equal(r.data.table.smallBlind, 1);
+  assert.equal(r.data.table.bigBlind, 0);
+  await inst.close();
 });

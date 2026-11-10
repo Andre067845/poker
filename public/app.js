@@ -10,7 +10,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const num = (n) => Number(n || 0).toLocaleString('es-AR');
 // Todas las cantidades del juego se muestran en Bs.
 const fmt = (n) => `Bs\u00a0${num(n)}`;
-const blindsText = (t) => (!t || !t.bigBlind ? 'Sin ciegas' : `${fmt(t.smallBlind)} / ${fmt(t.bigBlind)}`);
+const blindsText = (t) => (!t ? '' : t.bigBlind ? `SB ${fmt(t.smallBlind)} / BB ${fmt(t.bigBlind)}` : t.smallBlind ? `Solo SB ${fmt(t.smallBlind)}` : 'Sin ciegas');
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n));
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const dtFmt = new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeStyle: 'short' });
@@ -409,16 +409,17 @@ function renderCreate() {
       <form id="cf" novalidate>
         <label for="name">Nombre de la mesa</label>
         <input id="name" name="name" type="text" maxlength="40" value="Mesa de ${esc(state.user.username)}" required>
-        <label>¿Se juega con small blind y big blind?</label>
-        <div class="seg yesno" role="radiogroup" aria-label="¿Se juega con ciegas?">
-          <button type="button" data-blinds="1" role="radio" aria-checked="false">Sí</button>
-          <button type="button" data-blinds="0" role="radio" aria-checked="false">No</button>
+        <label>¿Cómo se juega?</label>
+        <div class="seg yesno" role="radiogroup" aria-label="¿Cómo se juega?">
+          <button type="button" data-blinds="both" role="radio" aria-checked="false">Con SB y BB</button>
+          <button type="button" data-blinds="sb" role="radio" aria-checked="false">Solo SB</button>
         </div>
         <div class="grid2 hidden" id="blinds-fields">
           <div><label for="smallBlind">¿De cuánto la small blind?</label>
-            <input id="smallBlind" name="smallBlind" type="number" min="1" value="5" inputmode="numeric"></div>
-          <div><label for="bigBlind">¿De cuánto la big blind?</label>
-            <input id="bigBlind" name="bigBlind" type="number" min="1" value="10" inputmode="numeric">
+            <input id="smallBlind" name="smallBlind" type="number" min="1" value="1" inputmode="numeric">
+            <div class="hint" id="sb-hint"></div></div>
+          <div id="bb-field"><label for="bigBlind">¿De cuánto la big blind?</label>
+            <input id="bigBlind" name="bigBlind" type="number" min="1" value="2" inputmode="numeric">
             <div class="hint">Sugerencia: el doble de la small blind.</div></div>
         </div>
         <div class="grid2">
@@ -427,10 +428,10 @@ function renderCreate() {
           <div><label for="turnSeconds">Tiempo máximo por turno (segundos)</label>
             <input id="turnSeconds" name="turnSeconds" type="number" min="10" max="300" value="30" inputmode="numeric"></div>
           <div><label for="startingStack">Entrada inicial (Bs)</label>
-            <input id="startingStack" name="startingStack" type="number" min="1" value="1000" inputmode="numeric">
+            <input id="startingStack" name="startingStack" type="number" min="1" value="30" inputmode="numeric">
             <div class="hint" id="stack-hint"></div></div>
           <div><label for="maxBuyin">Importe máximo por jugador al entrar</label>
-            <input id="maxBuyin" name="maxBuyin" type="number" min="1" value="2000" inputmode="numeric">
+            <input id="maxBuyin" name="maxBuyin" type="number" min="1" value="200" inputmode="numeric">
             <div class="hint">También es el tope de Bs al recargar.</div></div>
         </div>
         <label class="check"><input type="checkbox" name="allowRebuy" id="allowRebuy" checked> Permitir recargas de Bs (solo entre manos)</label>
@@ -441,13 +442,14 @@ function renderCreate() {
   const f = document.getElementById('cf');
   const sb = f.smallBlind; const bb = f.bigBlind; const st = f.startingStack; const mx = f.maxBuyin;
   let bbTouched = false; let mxTouched = false;
-  let useBlinds = null;
+  let mode = null; // 'both' | 'sb'
   f.querySelectorAll('[data-blinds]').forEach((b) => b.addEventListener('click', () => {
-    useBlinds = b.dataset.blinds === '1';
+    mode = b.dataset.blinds;
     document.getElementById('err').innerHTML = '';
     f.querySelectorAll('[data-blinds]').forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-checked', String(x === b)); });
-    document.getElementById('blinds-fields').classList.toggle('hidden', !useBlinds);
-    if (!useBlinds && !mxTouched) { st.value = 30; mx.value = 200; }
+    document.getElementById('blinds-fields').classList.remove('hidden');
+    document.getElementById('bb-field').classList.toggle('hidden', mode !== 'both');
+    document.getElementById('sb-hint').textContent = mode === 'sb' ? 'La pone siempre el jugador a la izquierda del dealer. No hay big blind.' : '';
     hint();
   }));
   bb.addEventListener('input', () => { bbTouched = true; hint(); });
@@ -455,8 +457,9 @@ function renderCreate() {
   sb.addEventListener('input', () => { if (!bbTouched && Number(sb.value) > 0) bb.value = Number(sb.value) * 2; hint(); });
   st.addEventListener('input', () => { if (!mxTouched && Number(st.value) > 0) mx.value = Number(st.value) * 2; hint(); });
   function hint() {
-    const b = Number(bb.value) || 0;
-    document.getElementById('stack-hint').textContent = useBlinds && b ? `Equivale a ${Math.floor((Number(st.value) || 0) / b)} big blinds (mínimo 10).` : '';
+    const b = mode === 'both' ? Number(bb.value) || 0 : mode === 'sb' ? Number(sb.value) || 0 : 0;
+    const what = mode === 'both' ? 'big blinds' : 'small blinds';
+    document.getElementById('stack-hint').textContent = b ? `Equivale a ${Math.floor((Number(st.value) || 0) / b)} ${what} (mínimo 10).` : '';
   }
   hint();
   f.addEventListener('submit', async (e) => {
@@ -464,15 +467,16 @@ function renderCreate() {
     const err = document.getElementById('err');
     const d = {
       name: f.name.value, maxPlayers: Number(f.maxPlayers.value), turnSeconds: Number(f.turnSeconds.value),
-      useBlinds: !!useBlinds, smallBlind: Number(sb.value), bigBlind: Number(bb.value), startingStack: Number(st.value),
+      blindMode: mode, smallBlind: Number(sb.value), bigBlind: mode === 'both' ? Number(bb.value) : 0, startingStack: Number(st.value),
       maxBuyin: Number(mx.value), allowRebuy: f.allowRebuy.checked,
     };
     const problems = [];
     if (!d.name.trim()) problems.push('Poné un nombre para la mesa.');
-    if (useBlinds === null) problems.push('Elegí si se juega con small blind y big blind.');
-    if (useBlinds && d.bigBlind < d.smallBlind) problems.push('La big blind no puede ser menor que la small blind.');
-    if (useBlinds && d.startingStack < d.bigBlind * 10) problems.push(`La entrada inicial debe ser al menos ${fmt(d.bigBlind * 10)} (10 big blinds).`);
-    if (!useBlinds && d.startingStack < 10) problems.push('La entrada inicial debe ser al menos Bs 10.');
+    if (!mode) problems.push('Elegí si se juega con SB y BB o solo con SB.');
+    if (mode && !(d.smallBlind >= 1)) problems.push('La small blind debe ser al menos 1.');
+    if (mode === 'both' && d.bigBlind < d.smallBlind) problems.push('La big blind no puede ser menor que la small blind.');
+    if (mode === 'both' && d.startingStack < d.bigBlind * 10) problems.push(`La entrada inicial debe ser al menos ${fmt(d.bigBlind * 10)} (10 big blinds).`);
+    if (mode === 'sb' && d.startingStack < d.smallBlind * 10) problems.push(`La entrada inicial debe ser al menos ${fmt(d.smallBlind * 10)} (10 small blinds).`);
     if (d.maxBuyin < d.startingStack) problems.push('El máximo de entrada no puede ser menor que la entrada inicial.');
     if (problems.length) { err.innerHTML = `<div class="form-error">${problems.map(esc).join('<br>')}</div>`; return; }
     try {
@@ -528,7 +532,7 @@ async function renderJoin(code) {
         <dt>Jugadores dentro</dt><dd>${t.players.length ? t.players.map((p) => `${esc(p.username)} <span class="muted small">(${fmt(p.stack)})</span>`).join(', ') : 'Nadie todavía'}</dd>
         <dt>Asientos disponibles</dt><dd>${t.freeSeats} de ${t.maxPlayers}</dd>
         <dt>Entrada inicial</dt><dd>${fmt(t.startingStack)}</dd>
-        <dt>Ciegas</dt><dd>${t.bigBlind ? `Small ${fmt(t.smallBlind)} · Big ${fmt(t.bigBlind)}` : 'Sin ciegas'}</dd>
+        <dt>Ciegas</dt><dd>${blindsText(t)}</dd>
         <dt>Tiempo por turno</dt><dd>${t.turnSeconds} s</dd>
         <dt>Partida</dt><dd>${t.gameStarted ? (t.handInProgress ? 'Ya comenzó (hay una mano en curso: vas a recibir cartas en la siguiente)' : 'Ya comenzó') : 'Todavía no comenzó'}</dd>
         <dt>Recargas</dt><dd>${t.allowRebuy ? 'Permitidas entre manos' : 'No permitidas'}</dd>
@@ -1375,7 +1379,8 @@ function rulesHtml() {
   return `<h2>Cómo se juega</h2>
   <p>Cada jugador recibe <b>dos cartas privadas</b>. Se reparten hasta <b>cinco cartas comunitarias</b> (flop: 3, turn: 1, river: 1). Gana quien forme la <b>mejor combinación de cinco cartas</b> usando cualquier mezcla de sus dos cartas y las comunitarias, o quien quede solo cuando los demás se retiran.</p>
   <ul>
-    <li><b>Ciegas (si la mesa las usa):</b> antes de repartir, los dos jugadores a la izquierda del botón (D) ponen la small blind y la big blind. Con dos jugadores, el botón pone la small blind y habla primero antes del flop.</li>
+    <li><b>Solo SB:</b> si la mesa se juega así, el jugador a la izquierda del dealer pone la small blind y no hay big blind; al final de la ronda tiene la opción de pasar o subir.</li>
+    <li><b>Ciegas (SB y BB):</b> antes de repartir, los dos jugadores a la izquierda del botón (D) ponen la small blind y la big blind. Con dos jugadores, el botón pone la small blind y habla primero antes del flop.</li>
     <li><b>Rondas:</b> preflop, flop, turn y river. En cada una podés <b>pasar</b> (si no hay apuesta), <b>igualar</b>, <b>apostar/subir</b> o <b>retirarte</b>.</li>
     <li><b>No Limit:</b> podés apostar todos tus Bs (all-in). La subida mínima es igual a la última subida (o a la big blind).</li>
     <li><b>All-in y botes secundarios:</b> si alguien va all-in por menos, solo puede ganar lo que igualó; el resto se juega en un bote secundario.</li>

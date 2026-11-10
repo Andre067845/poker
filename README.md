@@ -131,7 +131,7 @@ Al abrir la web (o un enlace de invitación) solo se pide un **nombre**: sin con
 
 ## Mesa, personajes y cuentas
 
-- **Ciegas opcionales**: al crear la mesa se pregunta si se juega con small blind y big blind; solo si la respuesta es sí se piden los montos. Sin ciegas nadie pone nada al empezar y la apuesta mínima es Bs 1.
+- **Ciegas**: al crear la mesa se pregunta "¿Cómo se juega?": **Con SB y BB** (se piden los dos montos) o **Solo SB** (se pide la SB, normalmente Bs 1). Con "Solo SB" la pone siempre el jugador a la izquierda del dealer, no hay big blind, los demás deben igualar la SB y quien la puso tiene la opción al final de la ronda; la apuesta mínima es la SB.
 - **Crupier y personajes**: un crupier reparte las cartas (se ven volar hacia cada jugador) y da vuelta el flop, el turn y el river. Cada jugador es un personaje (cara y manos): al apostar mete fichas en la mesa y al pasar golpea la mesa dos veces. Antes de entrar a una mesa (y desde el lobby, en "Mi personaje") se elige color de piel, pelo, sombrero, gafas, barba y camisa.
 - **Cuentas**: el botón 💰 de la mesa muestra para todos con cuánto entró cada uno, cada carga en orden ("Entró con 30 → +20 → +50 → +10"), cuántas veces cargó, con cuánto quedó y **quién le paga a quién**. Al cerrar la mesa, todos reciben las cuentas finales, que quedan en el historial de partidas. La app no maneja dinero: solo lleva la cuenta.
 
@@ -142,7 +142,7 @@ La mesa se adapta al espacio disponible. En celular **vertical** el panel de acc
 ## Mostrar cartas y chat
 
 - **Mostrar mis cartas**: al terminar una mano, cualquier jugador que participó y cuyas cartas no se vieron (por ejemplo, el ganador cuando todos se retiraron, o quien se retiró) puede tocar "👁 Mostrar mis cartas" durante la pausa entre manos. Todos las ven en la mesa y queda registrado en el historial de la mano.
-- **Chat de la mesa** (botón 💬): mensajes libres de hasta 200 caracteres y frases rápidas ("¿Vas de farol, verdad?", "Te recomiendo irte", "Te recomiendo pagar", "Cagón", "¡Escalera!"). Cada mensaje aparece como globito sobre el asiento de quien lo envía. Hay límite anti-spam (6 mensajes cada 10 s). El chat guarda en memoria los últimos 60 mensajes de la mesa (se pierden si el servidor se reinicia).
+- **Chat de la mesa** (botón 💬): mensajes libres de hasta 200 caracteres y frases rápidas ("¿Vas de farol, verdad?", "Te recomiendo irte", "Te recomiendo pagar", "Cagón", "¡Escalera!", "¡Faroleada histórica!", "¡Color!", "¡Trica!", "¡Masivo!", "Checkea", "Foldea", "Si subís te pago", "Resubo", "No te voy a pagar", "¡Te chingué!"). Cada mensaje aparece como globito sobre el asiento de quien lo envía. Hay límite anti-spam (6 mensajes cada 10 s). El chat guarda en memoria los últimos 60 mensajes de la mesa (se pierden si el servidor se reinicia).
 
 ## Pendiente / limitaciones conocidas
 

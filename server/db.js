@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS poker_tables (
   big_blind       INTEGER NOT NULL,
   turn_seconds    INTEGER NOT NULL,
   allow_rebuy     INTEGER NOT NULL,
+  bonus72         INTEGER NOT NULL DEFAULT 0,
   max_buyin       INTEGER NOT NULL,
   status          TEXT NOT NULL DEFAULT 'open',
   created_at      TEXT NOT NULL
@@ -133,6 +134,8 @@ function migrate(db) {
   if (!cols.includes('recovery_hash')) db.exec('ALTER TABLE users ADD COLUMN recovery_hash TEXT');
   if (!cols.includes('is_guest')) db.exec('ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0');
   if (!cols.includes('avatar')) db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');
+  const tcols = db.prepare('PRAGMA table_info(poker_tables)').all().map((c) => c.name);
+  if (!tcols.includes('bonus72')) db.exec('ALTER TABLE poker_tables ADD COLUMN bonus72 INTEGER NOT NULL DEFAULT 0');
 }
 
 const now = () => new Date().toISOString();

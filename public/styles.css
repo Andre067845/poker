@@ -453,3 +453,34 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .my-hand-pill b { color: var(--accent); }
 .card.core { box-shadow: 0 0 0 3px rgba(242,193,78,.85), 0 2px 6px rgba(0,0,0,.45); }
 @media (max-width: 700px) { .my-hand-pill { font-size: .8rem; padding: .1em .55em; } }
+
+/* bono 7-2 y empate */
+.bonus-banner { background: linear-gradient(90deg, #7a1fa2, #c2185b); color: #fff; border: 1px solid #ffd54f; border-radius: 10px; padding: .35em .8em; font-weight: 800; font-size: .95rem; text-align: center; animation: pop2 .35s ease-out; }
+@keyframes pop2 { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.tie-hand { font-weight: 600; opacity: .85; }
+
+/* relojes en la muñeca */
+.hand { position: relative; }
+.watch { position: absolute; left: 50%; top: -45%; transform: translateX(-50%); width: 86%; height: 72%; border-radius: 30%; box-sizing: border-box; border: 1.5px solid #888; background: #223; box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.watch::after { content: ""; position: absolute; inset: 22%; border-radius: 50%; background: #0d1b3a; }
+.w-ap { border-color: #cfd4da; background: #9aa3ad; border-radius: 22%; }
+.w-ap::after { background: #1b2f5a; border-radius: 18%; }
+.w-rolex { border-color: #f6d35b; background: #c9971a; border-radius: 50%; }
+.w-rolex::after { background: #0f5a36; }
+.w-arco { border: 0; background: conic-gradient(#ff3b30, #ff9500, #ffcc00, #34c759, #00c7be, #007aff, #af52de, #ff3b30); border-radius: 50%; }
+.w-arco::after { background: #111; inset: 26%; }
+.w-multi { border-color: #fff; background: linear-gradient(90deg, #ff3b30 0 25%, #ffcc00 25% 50%, #34c759 50% 75%, #007aff 75%); }
+.w-multi::after { background: #fff; }
+.w-diam { border-color: #e9f8ff; background: repeating-conic-gradient(#fff 0 12deg, #9fdcff 12deg 24deg); border-radius: 50%; }
+.w-diam::after { background: #dff4ff; }
+@media (max-width: 700px) {
+  .bonus-banner { font-size: .78rem; padding: .25em .6em; }
+}
+
+/* manos un poco más abajo para que se vean cadenas y pecho */
+.hands { margin-top: -9px; }
+.av-preview .hands { margin-top: -12px; }
+.dealer-fig .hands { margin-top: -10px; }
+.av-preview { position: sticky; top: 0; z-index: 2; }
+@media (max-width: 700px) { .hands { margin-top: -7px; } }
+@media (orientation: landscape) and (max-height: 520px) { .hands { margin-top: -6px; } }

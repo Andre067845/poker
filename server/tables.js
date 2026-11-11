@@ -36,6 +36,7 @@ function validateTableSettings(input) {
     big_blind: useBlinds ? num('bigBlind') : 0,
     turn_seconds: num('turnSeconds'),
     allow_rebuy: input.allowRebuy ? 1 : 0,
+    bonus72: input.bonus72 ? 1 : 0,
     max_buyin: num('maxBuyin'),
   };
   if (s.max_players < LIMITS.minPlayers || s.max_players > LIMITS.maxPlayers) throw new UserError('La cantidad de jugadores debe estar entre 2 y 9');
@@ -60,7 +61,7 @@ function publicTable(t) {
     id: t.id, code: t.code, name: t.name, ownerId: t.owner_id, status: t.status,
     maxPlayers: t.max_players, startingStack: t.starting_stack, smallBlind: t.small_blind, useBlinds: t.big_blind > 0,
     blindMode: t.big_blind > 0 ? 'both' : t.small_blind > 0 ? 'sb' : 'none',
-    bigBlind: t.big_blind, turnSeconds: t.turn_seconds, allowRebuy: !!t.allow_rebuy,
+    bigBlind: t.big_blind, turnSeconds: t.turn_seconds, allowRebuy: !!t.allow_rebuy, bonus72: !!t.bonus72,
     maxBuyin: t.max_buyin, minBuyin: minBuyinFor(t), createdAt: t.created_at,
   };
 }
@@ -444,6 +445,24 @@ class Room {
   _finishHand() {
     const h = this.hand;
     const res = h.result;
+    // Bono 7-2: si la mesa lo tiene activado y alguien gana con 7 y 2 en la mano,
+    // cada uno de los demás jugadores de esa mano le paga Bs 1 (si le queda).
+    const bonus = [];
+    if (this.t.bonus72) {
+      for (const w of res.winners) {
+        const wp = h.player(w.seat);
+        const ranks = wp.hole.map((c) => c[0]).sort().join('');
+        if (ranks !== '27') continue;
+        let total = 0;
+        for (const p of h.players) {
+          if (p === wp) continue;
+          const amt = Math.min(1, p.stack);
+          p.stack -= amt; total += amt;
+        }
+        wp.stack += total;
+        if (total > 0) bonus.push({ seat: w.seat, amount: total, cards: wp.hole.slice() });
+      }
+    }
     for (const p of h.players) if (this.seats[p.seat]) this.seats[p.seat].stack = p.stack;
     const name = (seat) => (this.seats[seat] ? this.seats[seat].username : '—');
     const userOf = (seat) => h.player(seat).userId;
@@ -456,8 +475,13 @@ class Room {
       showdown: res.showdown.map((s) => ({ seat: s.seat, cards: s.cards, handName: s.handName, bestCards: s.bestCards, username: name(s.seat) })),
       uncalled: res.uncalled,
       shown: [],
+      bonus72: bonus.map((b) => ({ ...b, username: name(b.seat) })),
       at: Date.now(),
     };
+    // Quien cobra el bono muestra su 7-2 (si no se vio en el showdown).
+    for (const b of bonus) {
+      if (!res.showdown.some((x) => x.seat === b.seat)) this.lastResult.shown.push({ seat: b.seat, cards: b.cards, username: name(b.seat) });
+    }
     const summary = {
       board: res.board,
       type: res.type,
@@ -466,6 +490,8 @@ class Room {
       winners: res.winners.map((w) => ({ userId: userOf(w.seat), username: name(w.seat), amount: w.amount, handName: w.handName })),
       showdown: res.showdown.map((s) => ({ userId: userOf(s.seat), username: name(s.seat), cards: s.cards, handName: s.handName })),
       actions: h.log.map((a) => ({ ...a, username: name(a.seat) })),
+      bonus72: bonus.map((b) => ({ userId: userOf(b.seat), username: name(b.seat), amount: b.amount })),
+      shown: this.lastResult.shown.map((x) => ({ userId: userOf(x.seat), username: x.username, cards: x.cards })),
     };
     this.db.tx(() => {
       this.db.prepare('UPDATE hands SET ended_at = ?, summary = ? WHERE id = ?').run(now(), JSON.stringify(summary), this.handRowId);
@@ -728,8 +754,8 @@ class TableManager {
       try {
         const id = this.db.tx(() => {
           const r = this.db.prepare(`INSERT INTO poker_tables (code, name, owner_id, max_players, starting_stack, small_blind, big_blind,
-            turn_seconds, allow_rebuy, max_buyin, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-            .run(code, s.name, user.id, s.max_players, s.starting_stack, s.small_blind, s.big_blind, s.turn_seconds, s.allow_rebuy, s.max_buyin, now());
+            turn_seconds, allow_rebuy, max_buyin, bonus72, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+            .run(code, s.name, user.id, s.max_players, s.starting_stack, s.small_blind, s.big_blind, s.turn_seconds, s.allow_rebuy, s.max_buyin, s.bonus72, now());
           this.db.prepare('INSERT INTO table_members (table_id, user_id, joined_at) VALUES (?,?,?)').run(r.lastInsertRowid, user.id, now());
           return r.lastInsertRowid;
         });

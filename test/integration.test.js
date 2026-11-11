@@ -580,3 +580,45 @@ test('mesa con solo SB', async () => {
   assert.equal(r.data.table.bigBlind, 0);
   await inst.close();
 });
+
+test('bono 7-2: quien gana con 7 y 2 cobra Bs 1 de cada jugador', async (t) => {
+  const inst = createApp({ dbFile: ':memory:', resultDelayMs: 60000, graceMs: 60000, sweepMs: 1000 });
+  const base = `http://127.0.0.1:${await inst.listen(0)}`;
+  const cs = [client(base), client(base), client(base)];
+  const names = ['Andre', 'Benja', 'Caro'];
+  for (let i = 0; i < 3; i++) await cs[i].post('/api/auth/name', { username: names[i] });
+  let r = await cs[0].post('/api/tables', { name: 'Siete dos', maxPlayers: 4, startingStack: 30, blindMode: 'sb', smallBlind: 1, turnSeconds: 30, allowRebuy: false, maxBuyin: 100, bonus72: true });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.table.bonus72, true);
+  const code = r.data.table.code;
+  const ss = cs.map((c) => c.socket());
+  t.after(async () => { ss.forEach((s) => s.close()); await inst.close(); });
+  await Promise.all(ss.map((s) => s.ready));
+  for (let i = 0; i < 3; i++) { await ss[i].call('table:join', { code }); await ss[i].call('table:sit', { amount: 30, requestId: `sit-7-2-00${i}` }); await ss[i].call('table:ready', { ready: true }); }
+  assert.ok((await ss[0].call('table:start')).ok);
+  await until(() => ss.every((s) => s.state && s.state.hand), 2000, 'mano');
+  // se fuerza la mano del primero en hablar: 7 y 2
+  const room = inst.tables.roomByCode(code);
+  const first = room.hand.turnSeat;
+  room.hand.player(first).hole = ['7h', '2c'];
+  const sockOf = (seat) => ss.find((s) => s.state.mySeat === seat);
+  // el del 7-2 sube y los demás se retiran: gana sin showdown
+  const w = sockOf(first);
+  let ack = await w.call('table:action', { type: 'raise', amount: 5, turnId: room.turnId, actionId: rid() });
+  assert.ok(ack.ok, ack.error);
+  for (let k = 0; k < 2; k++) {
+    const seat = room.hand.turnSeat;
+    ack = await sockOf(seat).call('table:action', { type: 'fold', turnId: room.turnId, actionId: rid() });
+    assert.ok(ack.ok, ack.error);
+  }
+  await until(() => ss.every((s) => s.state.lastResult), 2000, 'resultado');
+  const lr = ss[0].state.lastResult;
+  assert.equal(lr.bonus72.length, 1);
+  assert.equal(lr.bonus72[0].amount, 2, 'Bs 1 de cada uno de los otros dos');
+  assert.equal(lr.bonus72[0].seat, first);
+  assert.ok(lr.shown.some((x) => x.seat === first), 'se muestra el 7-2');
+  const total = ss[0].state.seats.filter(Boolean).reduce((a, s) => a + s.stack, 0);
+  assert.equal(total, 90, 'el total de Bs no cambia');
+  const acc = (await ss[0].call('table:accounts')).accounts;
+  assert.equal(acc.players.reduce((a, p) => a + p.balance, 0), 0);
+});

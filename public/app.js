@@ -1,6 +1,6 @@
 /* wakapoker — cliente. Sin dependencias salvo socket.io. */
 import { sounds } from './sound.js';
-import { avatarSvg, handsHtml, LABELS, VALUE_LABELS, DEALER } from './avatar.js';
+import { avatarSvg, handsHtml, LABELS, ORDER, labelOf, DEALER } from './avatar.js';
 
 const $app = document.getElementById('app');
 const state = { user: null, avatarOptions: null };
@@ -296,12 +296,12 @@ function avatarEditor(container, { onSaved } = {}) {
       const isColor = key === 'skin' || key === 'hairColor' || key === 'shirt';
       const items = opts[key].map((v) => isColor
         ? `<button type="button" class="swatch ${av[key] === v ? 'active' : ''}" data-k="${key}" data-v="${esc(v)}" style="background:${esc(v)}" aria-label="${esc(LABELS[key])}"></button>`
-        : `<button type="button" class="chip ${av[key] === v ? 'active' : ''}" data-k="${key}" data-v="${esc(v)}">${esc(VALUE_LABELS[v] || v)}</button>`).join('');
+        : `<button type="button" class="chip ${av[key] === v ? 'active' : ''}" data-k="${key}" data-v="${esc(v)}">${esc(labelOf(v))}</button>`).join('');
       return `<div class="av-row"><div class="av-label">${esc(LABELS[key])}</div><div class="av-opts">${items}</div></div>`;
     };
     container.innerHTML = `<div class="av-editor">
       <div class="av-preview">${avatarSvg(av)}${handsHtml(av, '<span class="mini-back"></span><span class="mini-back"></span>')}</div>
-      <div class="av-fields">${['skin', 'hair', 'hairColor', 'hat', 'glasses', 'beard', 'shirt'].map(row).join('')}</div>
+      <div class="av-fields">${ORDER.filter((k) => opts[k] && !(k === 'shirt' && av.body && av.body !== 'con polera')).map(row).join('')}</div>
       <div class="av-status muted small" aria-live="polite"></div>
     </div>`;
     container.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
@@ -435,6 +435,12 @@ function renderCreate() {
             <div class="hint">También es el tope de Bs al recargar.</div></div>
         </div>
         <label class="check"><input type="checkbox" name="allowRebuy" id="allowRebuy" checked> Permitir recargas de Bs (solo entre manos)</label>
+        <label>¿Pagar Bs 1 al que gane con la mano 7 y 2?</label>
+        <div class="seg yesno" role="radiogroup" aria-label="Bono 7 y 2">
+          <button type="button" data-b72="1" role="radio" aria-checked="false">Sí</button>
+          <button type="button" data-b72="0" role="radio" aria-checked="false">No</button>
+        </div>
+        <div class="hint">Si alguien gana una mano teniendo 7 y 2, cada uno de los demás jugadores le paga Bs 1 automáticamente.</div>
         <div id="err"></div>
         <div class="row" style="margin-top:1em"><a class="btn ghost" href="/" data-link>Cancelar</a><span class="spacer"></span><button class="btn primary">Crear mesa</button></div>
       </form>
@@ -442,6 +448,12 @@ function renderCreate() {
   const f = document.getElementById('cf');
   const sb = f.smallBlind; const bb = f.bigBlind; const st = f.startingStack; const mx = f.maxBuyin;
   let bbTouched = false; let mxTouched = false;
+  let b72 = null;
+  f.querySelectorAll('[data-b72]').forEach((b) => b.addEventListener('click', () => {
+    b72 = b.dataset.b72 === '1';
+    document.getElementById('err').innerHTML = '';
+    f.querySelectorAll('[data-b72]').forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-checked', String(x === b)); });
+  }));
   let mode = null; // 'both' | 'sb'
   f.querySelectorAll('[data-blinds]').forEach((b) => b.addEventListener('click', () => {
     mode = b.dataset.blinds;
@@ -468,11 +480,12 @@ function renderCreate() {
     const d = {
       name: f.name.value, maxPlayers: Number(f.maxPlayers.value), turnSeconds: Number(f.turnSeconds.value),
       blindMode: mode, smallBlind: Number(sb.value), bigBlind: mode === 'both' ? Number(bb.value) : 0, startingStack: Number(st.value),
-      maxBuyin: Number(mx.value), allowRebuy: f.allowRebuy.checked,
+      maxBuyin: Number(mx.value), allowRebuy: f.allowRebuy.checked, bonus72: !!b72,
     };
     const problems = [];
     if (!d.name.trim()) problems.push('Poné un nombre para la mesa.');
     if (!mode) problems.push('Elegí si se juega con SB y BB o solo con SB.');
+    if (b72 === null) problems.push('Elegí si se paga Bs 1 al que gane con 7 y 2.');
     if (mode && !(d.smallBlind >= 1)) problems.push('La small blind debe ser al menos 1.');
     if (mode === 'both' && d.bigBlind < d.smallBlind) problems.push('La big blind no puede ser menor que la small blind.');
     if (mode === 'both' && d.startingStack < d.bigBlind * 10) problems.push(`La entrada inicial debe ser al menos ${fmt(d.bigBlind * 10)} (10 big blinds).`);
@@ -536,6 +549,7 @@ async function renderJoin(code) {
         <dt>Tiempo por turno</dt><dd>${t.turnSeconds} s</dd>
         <dt>Partida</dt><dd>${t.gameStarted ? (t.handInProgress ? 'Ya comenzó (hay una mano en curso: vas a recibir cartas en la siguiente)' : 'Ya comenzó') : 'Todavía no comenzó'}</dd>
         <dt>Recargas</dt><dd>${t.allowRebuy ? 'Permitidas entre manos' : 'No permitidas'}</dd>
+        <dt>Bono 7 y 2</dt><dd>${t.bonus72 ? 'Sí: Bs 1 de cada jugador al que gane con 7 y 2' : 'No'}</dd>
       </dl>
       ${full ? '<div class="form-error">La mesa está completa. Podés entrar a mirar y sentarte cuando se libere un lugar.</div>' : `
       <h2 style="margin-top:1.2em">${state.user.avatarSet ? 'Tu personaje' : 'Antes de entrar, armá tu personaje'}</h2>
@@ -706,6 +720,21 @@ function renderTable(code, opts = {}) {
     }
   }
 
+  /** Texto del resultado: ganador normal o "Empate entre A y B, A gana 4 y B 4". */
+  function resultText(lr) {
+    const tiedSeats = new Set();
+    for (const pot of lr.pots) if (pot.winners.length > 1) pot.winners.forEach((w) => tiedSeats.add(w.seat));
+    const join = (arr) => (arr.length <= 1 ? arr.join('') : `${arr.slice(0, -1).join(', ')} y ${arr[arr.length - 1]}`);
+    const normal = (w) => `${esc(w.username)} gana ${fmt(w.amount)}${w.handName ? ` con ${esc(w.handName)}` : ''}`;
+    if (!tiedSeats.size) return `🏆 ${lr.winners.map(normal).join(' · ')}`;
+    const tied = lr.winners.filter((w) => tiedSeats.has(w.seat));
+    const others = lr.winners.filter((w) => !tiedSeats.has(w.seat));
+    const hand = tied[0] && tied[0].handName ? ` <span class="tie-hand">(${esc(tied[0].handName)})</span>` : '';
+    let txt = `🤝 Empate entre ${join(tied.map((w) => esc(w.username)))}, ${join(tied.map((w, i) => `${esc(w.username)} ${i === 0 ? 'gana ' : ''}${fmt(w.amount)}`))}${hand}`;
+    if (others.length) txt += ` · 🏆 ${others.map(normal).join(' · ')}`;
+    return txt;
+  }
+
   function fitArea() {
     const area = document.getElementById('area');
     const stage = area && area.parentElement;
@@ -773,8 +802,8 @@ function renderTable(code, opts = {}) {
       if (side) center += `<div class="pots">${side}</div>`;
       center += `<div class="status-line">Mano #${h.number}<span class="street-lbl"> · ${({ preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River' })[h.street]}</span></div>`;
     } else if (lr) {
-      const parts = lr.winners.map((w) => `${esc(w.username)} gana ${fmt(w.amount)}${w.handName ? ` con ${esc(w.handName)}` : ''}`);
-      center += `<div class="result-banner">🏆 ${parts.join(' · ')}</div>`;
+      center += `<div class="result-banner">${resultText(lr)}</div>`;
+      if (lr.bonus72 && lr.bonus72.length) center += lr.bonus72.map((b) => `<div class="bonus-banner">🎉 ${esc(b.username)} se lleva ${fmt(b.amount)} por ganar con 7 y 2</div>`).join('');
       if (lr.shown && lr.shown.length) center += `<div class="status-line">👁 ${lr.shown.map((x) => `${esc(x.username)} mostró ${miniCards(x.cards)}`).join(' · ')}</div>`;
       if (lr.pots.length > 1) center += `<div class="pots">${lr.pots.map((p, i) => `<span class="pot">${i === 0 ? 'Principal' : `Secundario ${i}`}: ${fmt(p.amount)} → ${p.winners.map((w) => esc(w.username)).join(', ')}</span>`).join('')}</div>`;
       center += `<div class="status-line">${st.gameStarted ? 'La próxima mano empieza en unos segundos…' : ''}</div>`;
@@ -1181,6 +1210,7 @@ function renderTable(code, opts = {}) {
         ${st ? `<dl class="info-list small"><dt>Ciegas</dt><dd>${blindsText(st.table)}</dd>
           <dt>Entrada</dt><dd>${fmt(st.table.startingStack)} (máx. ${fmt(st.table.maxBuyin)})</dd>
           <dt>Turno</dt><dd>${st.table.turnSeconds} s</dd><dt>Recargas</dt><dd>${st.table.allowRebuy ? 'Sí, entre manos' : 'No'}</dd>
+          <dt>Bono 7 y 2</dt><dd>${st.table.bonus72 ? 'Sí (Bs 1 de cada uno)' : 'No'}</dd>
           <dt>Creador</dt><dd>${esc(st.table.ownerName)}</dd></dl>` : ''}
         <div class="row"><button class="btn" id="m-rules">Reglas y combinaciones</button>
           <button class="btn" id="m-sound">${sounds.enabled ? '🔇 Silenciar' : '🔊 Activar sonido'}</button></div>
@@ -1371,6 +1401,7 @@ async function renderSession(id) {
       <div class="hand-row"><div><b>Mano #${h.number}</b> <span class="muted small">· ${fmtTime(h.startedAt)}${h.endedAt ? ` – ${fmtTime(h.endedAt)}` : ' · en curso'}</span></div>
       ${h.voided ? '<div class="muted small">Mano anulada (reinicio del servidor). Los Bs volvieron a sus dueños.</div>' : `
       <div class="small">${h.winners.map((w) => `🏆 ${esc(w.username)} +${fmt(w.amount)}${w.handName ? ` con ${esc(w.handName)}` : ''}`).join(' · ') || '—'}</div>
+      ${h.bonus72 && h.bonus72.length ? `<div class="small">${h.bonus72.map((b) => `🎉 ${esc(b.username)} se llevó ${fmt(b.amount)} por ganar con 7 y 2`).join(' · ')}</div>` : ''}
       ${h.board.length ? `<div class="small">Mesa: ${miniCards(h.board)}</div>` : ''}
       ${h.shown && h.shown.length ? `<div class="small muted">Mostró voluntariamente: ${h.shown.map((x) => `${esc(x.username)} ${miniCards(x.cards)}`).join(' · ')}</div>` : ''}
       ${h.showdown.length ? `<div class="small muted">Showdown: ${h.showdown.map((x) => `${esc(x.username)} ${miniCards(x.cards)} (${esc(x.handName)})`).join(' · ')}</div>` : ''}`}

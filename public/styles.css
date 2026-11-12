@@ -492,3 +492,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 
 /* reloj: se ve la caja y un poco de correa */
 .watch-svg { top: -95%; width: 150%; }
+
+/* reloj de foto, en proporción con la muñeca */
+.watch-img { position: absolute; left: 50%; top: -30%; width: 120%; height: auto; transform: translateX(-50%) rotate(-8deg); filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); pointer-events: none; user-select: none; }
+.watch-img { left: auto; right: 62%; top: -18%; width: 92%; transform: rotate(-6deg); }

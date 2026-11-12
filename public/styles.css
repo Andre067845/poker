@@ -496,3 +496,39 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 /* reloj de foto, en proporción con la muñeca */
 .watch-img { position: absolute; left: 50%; top: -30%; width: 120%; height: auto; transform: translateX(-50%) rotate(-8deg); filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); pointer-events: none; user-select: none; }
 .watch-img { left: auto; right: 62%; top: -18%; width: 92%; transform: rotate(-6deg); }
+
+/* ===== mesa más grande, personajes más grandes y reloj visible ===== */
+.table-stage { padding: 4px; }
+.felt { inset: 8% 5%; }
+.seat { width: 140px; }
+.figure { width: 68px; margin-bottom: -6px; }
+.hands { margin-top: -11px; gap: 3px; }
+.hand { width: 17px; height: 13px; border-radius: 8px 8px 6px 6px; }
+.hand-cards .card, .hand-cards .deal-in { --card-w: 29px; }
+.watch-img { right: 55%; top: -32%; width: 150%; transform: rotate(-6deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,.7)); }
+.dealer-fig { width: 58px; }
+.dealer-fig .hand { width: 15px; height: 11px; }
+.seat .name { font-size: .95rem; }
+.seat .stack { font-size: 1rem; }
+@media (max-width: 700px) {
+  .felt { inset: 7% 6%; }
+  .seat { width: 96px; }
+  .figure { width: 48px; margin-bottom: -5px; }
+  .hands { margin-top: -8px; gap: 2px; }
+  .hand { width: 12px; height: 10px; }
+  .hand-cards .card, .hand-cards .deal-in { --card-w: 21px; }
+  .watch-img { width: 165%; top: -40%; }
+  .dealer-fig { width: 40px; }
+  .seat .name { font-size: .8rem; }
+  .seat .stack { font-size: .85rem; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .felt { inset: 9% 5%; }
+  .seat { width: 96px; }
+  .figure { width: 40px; margin-bottom: -5px; }
+  .hands { margin-top: -7px; }
+  .hand { width: 11px; height: 9px; }
+  .hand-cards .card, .hand-cards .deal-in { --card-w: 18px; }
+  .watch-img { width: 165%; top: -40%; }
+  .dealer-fig { width: 32px; }
+}

@@ -701,7 +701,7 @@ function renderTable(code, opts = {}) {
     const k = ((seatIdx - anchor) % n + n) % n;
     const ang = Math.PI / 2 + (k * 2 * Math.PI) / n;
     const narrow = window.matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
-    const rx = narrow ? 40 : 44; const ry = narrow ? 40 : 38;
+    const rx = narrow ? 39 : 44; const ry = narrow ? 44 : 38;
     return { x: 50 + rx * Math.cos(ang), y: 50 + ry * Math.sin(ang), ang };
   }
 
@@ -745,7 +745,7 @@ function renderTable(code, opts = {}) {
     // La mesa ocupa todo el espacio, pero sin deformarse demasiado.
     if (w / h > 1.9) w = h * 1.9;
     if (w / h < 0.62) h = w / 0.62;
-    if (w > 1100) { h = h * (1100 / w); w = 1100; }
+    if (w > 1400) { h = h * (1400 / w); w = 1400; }
     area.style.width = `${w}px`;
     area.style.height = `${h}px`;
   }

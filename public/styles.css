@@ -532,3 +532,31 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   .watch-img { width: 165%; top: -40%; }
   .dealer-fig { width: 32px; }
 }
+
+/* ===== panel de abajo más compacto (los botones de acción no cambian) ===== */
+.action-panel { gap: 5px; padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom)); }
+.my-row { gap: 8px; }
+.my-cards { gap: 4px; }
+.my-cards .card { --card-w: 40px; }
+.my-info .big { font-size: 1rem; line-height: 1.2; }
+.my-hand-pill { font-size: .8rem; padding: .05em .55em; margin-top: 2px; }
+.my-info .muted.small { font-size: .78rem; }
+.facts { font-size: .78rem; line-height: 1.25; }
+.sizer { gap: 6px; }
+.sizer input[type=range] { height: 24px; }
+.sizer input[type=number] { min-height: 32px; padding: .2em .5em; font-size: .9rem; }
+.quick { gap: 4px; }
+.quick .btn { min-height: 26px; padding: .1em .6em; font-size: .78rem; }
+@media (max-width: 700px) {
+  .my-cards .card { --card-w: 30px; }
+  .my-info .big { font-size: .9rem; }
+  .my-hand-pill { font-size: .72rem; }
+  .facts { font-size: .72rem; }
+  .sizer { grid-template-columns: 1fr 72px; }
+  .sizer input[type=number] { min-height: 30px; }
+  .quick .btn { min-height: 24px; font-size: .72rem; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .my-cards .card, .action-panel.my-turn .my-cards .card { --card-w: 28px; }
+  .facts { font-size: .7rem; }
+}

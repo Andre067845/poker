@@ -484,3 +484,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .av-preview { position: sticky; top: 0; z-index: 2; }
 @media (max-width: 700px) { .hands { margin-top: -7px; } }
 @media (orientation: landscape) and (max-height: 520px) { .hands { margin-top: -6px; } }
+
+/* reloj dibujado (SVG) en la muñeca y cabeza grande */
+.watch-svg { position: absolute; left: 50%; top: -70%; width: 185%; height: auto; transform: translateX(-50%); filter: drop-shadow(0 1px 1px rgba(0,0,0,.55)); pointer-events: none; }
+.avatar-svg { overflow: visible; }
+.av-preview { padding-top: 26px; }

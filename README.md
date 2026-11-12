@@ -147,7 +147,7 @@ La mesa se adapta al espacio disponible. En celular **vertical** el panel de acc
 ## Mostrar cartas y chat
 
 - **Mostrar mis cartas**: al terminar una mano, cualquier jugador que participó y cuyas cartas no se vieron (por ejemplo, el ganador cuando todos se retiraron, o quien se retiró) puede tocar "👁 Mostrar mis cartas" durante la pausa entre manos. Todos las ven en la mesa y queda registrado en el historial de la mano.
-- **Chat de la mesa** (botón 💬): mensajes libres de hasta 200 caracteres y frases rápidas ("¿Vas de farol, verdad?", "Te recomiendo irte", "Te recomiendo pagar", "Cagón", "¡Escalera!", "¡Faroleada histórica!", "¡Color!", "¡Trica!", "¡Masivo!", "Checkea", "Foldea", "Si subís te pago", "Resubo", "No te voy a pagar", "¡Te chingué!"). Cada mensaje aparece como globito sobre el asiento de quien lo envía. Hay límite anti-spam (6 mensajes cada 10 s). El chat guarda en memoria los últimos 60 mensajes de la mesa (se pierden si el servidor se reinicia).
+- **Chat de la mesa** (botón 💬): mensajes libres de hasta 200 caracteres y frases rápidas ("Check de caballero", "Te recomiendo irte", "Te chingué", "Farol histórico", "Farol", "¿Vas de farol, verdad?", "Cagón", "Mete gay"). Cada mensaje aparece como globito sobre el asiento de quien lo envía. Hay límite anti-spam (6 mensajes cada 10 s). El chat guarda en memoria los últimos 60 mensajes de la mesa (se pierden si el servidor se reinicia).
 
 ## Pendiente / limitaciones conocidas
 

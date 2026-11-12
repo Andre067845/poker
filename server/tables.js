@@ -665,21 +665,14 @@ class Room {
 
 class TableManager {
   static QUICK_CHAT = [
-    '¿Vas de farol, verdad?',
+    'Check de caballero',
     'Te recomiendo irte',
-    'Te recomiendo pagar',
+    'Te chingué',
+    'Farol histórico',
+    'Farol',
+    '¿Vas de farol, verdad?',
     'Cagón',
-    '¡Escalera!',
-    '¡Faroleada histórica!',
-    '¡Color!',
-    '¡Trica!',
-    '¡Masivo!',
-    'Checkea',
-    'Foldea',
-    'Si subís te pago',
-    'Resubo',
-    'No te voy a pagar',
-    '¡Te chingué!',
+    'Mete gay',
   ];
 
   constructor({ db, io, config }) {

@@ -285,72 +285,113 @@ export function avatarSvg(a = {}, { title = '' } = {}) {
 }
 
 // ------------------------------------------------------------------ relojes
-// Dibujos inspirados en diseños conocidos: bisel octogonal con tornillos y esfera cuadriculada,
-// reloj de oro con bisel estriado y brazalete de eslabones, bisel de gemas arcoíris con tres subesferas, etc.
-const ring = (n, r, fn) => Array.from({ length: n }, (_, i) => {
-  const ang = (i / n) * Math.PI * 2 - Math.PI / 2;
-  return fn(22 + r * Math.cos(ang), 15 + r * Math.sin(ang), i);
-}).join('');
-const handsOfWatch = (c) => `<path d="M22 15 L22 9.4 M22 15 L26 16.6" stroke="${c}" stroke-width="1" stroke-linecap="round"/><circle cx="22" cy="15" r=".9" fill="${c}"/>`;
-const strap = (fill, line, links) => `<rect x="0" y="8.5" width="44" height="13" rx="2" fill="${fill}" stroke="${line}" stroke-width=".5"/>${links}`;
+// Se ve la caja del reloj y solo un tramo corto de correa. Dibujos inspirados en diseños conocidos:
+// bisel octogonal con tornillos y esfera cuadriculada; oro con bisel estriado, día y fecha;
+// cronógrafo con bisel de gemas arcoíris; caja curva de colores; y uno cubierto de diamantes.
+const CX = 20; const CY = 20;
+const pt = (r, deg) => [CX + r * Math.cos((deg - 90) * Math.PI / 180), CY + r * Math.sin((deg - 90) * Math.PI / 180)];
+const f2 = (n) => n.toFixed(2);
+const around = (n, r, fn, off = 0) => Array.from({ length: n }, (_, i) => { const d = (360 / n) * i + off; const [x, y] = pt(r, d); return fn(x, y, d, i); }).join('');
+
+const DEFS = `<defs>
+  <linearGradient id="wSteel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbfcfd"/><stop offset=".35" stop-color="#aab2bc"/><stop offset=".6" stop-color="#e9edf1"/><stop offset="1" stop-color="#7d858f"/></linearGradient>
+  <linearGradient id="wSteelB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8b939d"/><stop offset=".5" stop-color="#eef1f4"/><stop offset="1" stop-color="#8b939d"/></linearGradient>
+  <linearGradient id="wGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff6c2"/><stop offset=".35" stop-color="#d9a520"/><stop offset=".6" stop-color="#f7dc7a"/><stop offset="1" stop-color="#8c6200"/></linearGradient>
+  <linearGradient id="wGoldB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a87900"/><stop offset=".5" stop-color="#f9e08a"/><stop offset="1" stop-color="#a87900"/></linearGradient>
+  <linearGradient id="wRose" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe3cf"/><stop offset=".4" stop-color="#d1906a"/><stop offset=".65" stop-color="#f3c3a3"/><stop offset="1" stop-color="#94583a"/></linearGradient>
+  <linearGradient id="wRoseB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a1643f"/><stop offset=".5" stop-color="#f6cdb0"/><stop offset="1" stop-color="#a1643f"/></linearGradient>
+  <linearGradient id="wIce" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#bfe6fa"/><stop offset="1" stop-color="#8cc6e6"/></linearGradient>
+  <radialGradient id="wBlue" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#3d6fc4"/><stop offset="1" stop-color="#0d2553"/></radialGradient>
+  <radialGradient id="wChamp" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#fff3c9"/><stop offset="1" stop-color="#d9b25a"/></radialGradient>
+  <radialGradient id="wBlack" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#3a3a3a"/><stop offset="1" stop-color="#050505"/></radialGradient>
+</defs>`;
+
+// tramo corto de correa a cada lado de la caja (se corta en el borde)
+const stubs = (fill, line, detail) => `<rect x="-1" y="11" width="13" height="18" fill="${fill}" stroke="${line}" stroke-width=".5"/><rect x="28" y="11" width="13" height="18" fill="${fill}" stroke="${line}" stroke-width=".5"/>${detail}`;
+const glare = '<path d="M9.5 16.5 A11.5 11.5 0 0 1 22 8.6" stroke="#ffffff" stroke-width="1.6" fill="none" opacity=".35" stroke-linecap="round"/><path d="M27 30.6 A11.5 11.5 0 0 0 31.2 24" stroke="#ffffff" stroke-width=".8" fill="none" opacity=".2" stroke-linecap="round"/>';
+const crown = (fill, line) => `<rect x="33.2" y="18" width="3.4" height="4" rx=".9" fill="${fill}" stroke="${line}" stroke-width=".4"/><path d="M34.3 18.3 V21.7 M35.4 18.3 V21.7" stroke="${line}" stroke-width=".3"/>`;
+const handsW = (c, lume, sec = '#d33') => {
+  const [hx, hy] = pt(5.4, 305); const [mx, my] = pt(8.6, 60); const [sx, sy] = pt(9.4, 200); const [tx, ty] = pt(2.4, 20);
+  return `<path d="M${CX} ${CY} L${f2(hx)} ${f2(hy)}" stroke="${c}" stroke-width="1.7" stroke-linecap="round"/><path d="M${CX} ${CY} L${f2(mx)} ${f2(my)}" stroke="${c}" stroke-width="1.25" stroke-linecap="round"/>`
+    + `<path d="M${CX} ${CY} L${f2(hx)} ${f2(hy)}" stroke="${lume}" stroke-width=".6" stroke-linecap="round" opacity=".9"/><path d="M${CX} ${CY} L${f2(mx)} ${f2(my)}" stroke="${lume}" stroke-width=".45" stroke-linecap="round" opacity=".9"/>`
+    + `<path d="M${f2(tx)} ${f2(ty)} L${f2(sx)} ${f2(sy)}" stroke="${sec}" stroke-width=".4" stroke-linecap="round"/><circle cx="${CX}" cy="${CY}" r="1.1" fill="${c}"/><circle cx="${CX}" cy="${CY}" r=".45" fill="${sec}"/>`;
+};
+const batons = (r1, r2, fill, skip = []) => around(12, 0, (x, y, d, i) => {
+  if (skip.includes(i)) return '';
+  const [a, b] = pt(r1, d); const [c, e] = pt(r2, d);
+  return `<path d="M${f2(a)} ${f2(b)} L${f2(c)} ${f2(e)}" stroke="${fill}" stroke-width="${i % 3 === 0 ? 1.3 : 0.9}" stroke-linecap="round"/>`;
+});
+const minuteTrack = (r, c) => around(60, r, (x, y) => `<circle cx="${f2(x)}" cy="${f2(y)}" r=".16" fill="${c}"/>`);
 
 function watchSvg(kind) {
   let g = '';
   if (kind === 'AP') {
-    const links = [3, 7, 11, 33, 37, 41].map((x) => `<path d="M${x} 8.5 V21.5" stroke="#8f96a0" stroke-width=".7"/>`).join('') + '<path d="M0 12.5 H11 M0 17.5 H11 M33 12.5 H44 M33 17.5 H44" stroke="#eef1f4" stroke-width=".5"/>';
-    const oct = (r) => Array.from({ length: 8 }, (_, i) => { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; return `${(22 + r * Math.cos(a)).toFixed(2)},${(15 + r * Math.sin(a)).toFixed(2)}`; }).join(' ');
-    g = strap('#b9c0c9', '#7c838d', links)
-      + `<polygon points="${oct(13.2)}" fill="#dfe3e8" stroke="#7c838d" stroke-width=".6"/><polygon points="${oct(11.2)}" fill="#c5cbd3" stroke="#8f96a0" stroke-width=".4"/>`
-      + Array.from({ length: 8 }, (_, i) => { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; return `<circle cx="${(22 + 12.1 * Math.cos(a)).toFixed(2)}" cy="${(15 + 12.1 * Math.sin(a)).toFixed(2)}" r=".95" fill="#f4f6f8" stroke="#6b7078" stroke-width=".35"/>`; }).join('')
-      + '<circle cx="22" cy="15" r="8.6" fill="#1d3f7c"/>'
-      + [-6, -3, 0, 3, 6].map((d) => `<path d="M${22 + d} 7.2 V22.8 M14 ${15 + d} H30" stroke="#3460a8" stroke-width=".45"/>`).join('')
-      + '<circle cx="22" cy="15" r="8.6" fill="none" stroke="#0f2449" stroke-width=".6"/>'
-      + ring(12, 7.2, (x, y) => `<rect x="${(x - 0.45).toFixed(2)}" y="${(y - 0.45).toFixed(2)}" width=".9" height=".9" fill="#f4f6f8"/>`)
-      + handsOfWatch('#ffffff');
+    const oct = (r) => Array.from({ length: 8 }, (_, i) => pt(r, 22.5 + i * 45).map(f2).join(',')).join(' ');
+    g = stubs('url(#wSteelB)', '#6f7781', '<path d="M3 11 V29 M7 11 V29 M33 11 V29 M37 11 V29" stroke="#737b85" stroke-width=".5"/><rect x="-1" y="16.4" width="13" height="7.2" fill="#f4f6f8" opacity=".55"/><rect x="28" y="16.4" width="13" height="7.2" fill="#f4f6f8" opacity=".55"/>')
+      + crown('url(#wSteel)', '#6f7781')
+      + `<polygon points="${oct(16.6)}" fill="url(#wSteel)" stroke="#5f666f" stroke-width=".5"/>`
+      + `<polygon points="${oct(15.4)}" fill="none" stroke="#ffffff" stroke-width=".35" opacity=".7"/>`
+      + around(8, 13.6, (x, y, d) => `<g transform="rotate(${d} ${f2(x)} ${f2(y)})"><polygon points="${f2(x - 1.05)},${f2(y)} ${f2(x - 0.52)},${f2(y - 0.9)} ${f2(x + 0.52)},${f2(y - 0.9)} ${f2(x + 1.05)},${f2(y)} ${f2(x + 0.52)},${f2(y + 0.9)} ${f2(x - 0.52)},${f2(y + 0.9)}" fill="#f7f8fa" stroke="#5f666f" stroke-width=".3"/><path d="M${f2(x - 0.7)} ${f2(y)} H${f2(x + 0.7)}" stroke="#5f666f" stroke-width=".3"/></g>`)
+      + `<circle cx="${CX}" cy="${CY}" r="11" fill="url(#wBlue)" stroke="#0b1c3e" stroke-width=".6"/>`
+      + [-8, -6, -4, -2, 0, 2, 4, 6, 8].map((d) => `<path d="M${CX + d} ${f2(CY - Math.sqrt(121 - d * d))} V${f2(CY + Math.sqrt(121 - d * d))} M${f2(CX - Math.sqrt(121 - d * d))} ${CY + d} H${f2(CX + Math.sqrt(121 - d * d))}" stroke="#5f8bd6" stroke-width=".3" opacity=".7"/>`).join('')
+      + minuteTrack(10.3, '#dfe6f2')
+      + batons(7.6, 9.6, '#f4f6f8', [3])
+      + '<rect x="26.4" y="18.7" width="3.2" height="2.6" rx=".3" fill="#f7f8fa" stroke="#0b1c3e" stroke-width=".3"/><path d="M27.3 19.4 h1.4 M27.3 20.5 h1.4" stroke="#222" stroke-width=".4"/>'
+      + handsW('#f4f6f8', '#bfe0ff');
   } else if (kind === 'Rolex de oro') {
-    const links = [2.5, 6, 9.5, 34.5, 38, 41.5].map((x) => `<path d="M${x} 8.5 V21.5" stroke="#9a6f00" stroke-width=".6"/>`).join('')
-      + '<path d="M0 12.2 H11 M0 17.8 H11 M33 12.2 H44 M33 17.8 H44" stroke="#fff0a8" stroke-width=".7"/><rect x="0" y="12.9" width="11" height="4.2" fill="#f7d560" opacity=".7"/><rect x="33" y="12.9" width="11" height="4.2" fill="#f7d560" opacity=".7"/>';
-    g = strap('#e0ad2b', '#9a6f00', links)
-      + '<rect x="33.6" y="13.4" width="2.6" height="3.2" rx=".8" fill="#e0ad2b" stroke="#9a6f00" stroke-width=".4"/>'
-      + '<circle cx="22" cy="15" r="13" fill="#e9b93a" stroke="#9a6f00" stroke-width=".6"/>'
-      + '<circle cx="22" cy="15" r="11.3" fill="none" stroke="#b07f08" stroke-width="2.8" stroke-dasharray=".8 .7"/>'
-      + '<circle cx="22" cy="15" r="9.3" fill="#f6e2a3" stroke="#9a6f00" stroke-width=".5"/>'
-      + ring(12, 7.6, (x, y, i) => (i === 3 ? '' : `<rect x="${(x - 0.5).toFixed(2)}" y="${(y - 0.5).toFixed(2)}" width="1" height="1" rx=".2" fill="#8a6200"/>`))
-      + '<rect x="27.2" y="13.6" width="3.4" height="2.8" rx=".5" fill="#ffffff" stroke="#8a6200" stroke-width=".4"/><path d="M28.2 14.4 h1.4 M28.2 15.5 h1.4" stroke="#333" stroke-width=".45"/>'
-      + '<path d="M19.6 11.6 l.8 -1.2 l.8 1 l.8 -1.4 l.8 1.4 l.8 -1 l.8 1.2 Z" fill="#8a6200"/>'
-      + handsOfWatch('#5a4200');
+    g = stubs('url(#wGoldB)', '#8a6200', '<path d="M2.6 11 V29 M6.6 11 V29 M33.4 11 V29 M37.4 11 V29" stroke="#8a6200" stroke-width=".5"/><rect x="-1" y="15.6" width="13" height="8.8" fill="#fff3b0" opacity=".5"/><rect x="28" y="15.6" width="13" height="8.8" fill="#fff3b0" opacity=".5"/>')
+      + crown('url(#wGold)', '#8a6200')
+      + `<circle cx="${CX}" cy="${CY}" r="16.4" fill="url(#wGold)" stroke="#7a5600" stroke-width=".5"/>`
+      + around(48, 14.5, (x, y, d, i) => { const [a, b] = pt(12.7, d); const [c, e] = pt(16.1, d); return `<path d="M${f2(a)} ${f2(b)} L${f2(c)} ${f2(e)}" stroke="${i % 2 ? '#8a6200' : '#fff3b0'}" stroke-width=".85"/>`; })
+      + `<circle cx="${CX}" cy="${CY}" r="12.5" fill="none" stroke="#7a5600" stroke-width=".4"/>`
+      + `<circle cx="${CX}" cy="${CY}" r="12.2" fill="url(#wChamp)"/>`
+      + minuteTrack(11.4, '#6b4a00')
+      + batons(8.6, 10.6, '#7a5600', [0, 3])
+      + '<path d="M15.2 11.4 Q20 9.2 24.8 11.4 L24.2 13.6 Q20 11.8 15.8 13.6 Z" fill="#fffdf2" stroke="#7a5600" stroke-width=".3"/><path d="M17.4 12 h5.2" stroke="#333" stroke-width=".45"/>'
+      + '<path d="M18.3 15.6 l.6 -1.3 l.55 .9 l.55 -1.5 l.55 1.5 l.55 -.9 l.6 1.3 Z" fill="#7a5600"/>'
+      + '<rect x="26.3" y="18.5" width="3.6" height="3" rx=".4" fill="#fffdf2" stroke="#7a5600" stroke-width=".35"/><path d="M27.3 19.3 h1.6 M27.3 20.6 h1.6" stroke="#222" stroke-width=".45"/><ellipse cx="28.1" cy="20" rx="2.7" ry="2.3" fill="#ffffff" opacity=".22" stroke="#ffffff" stroke-width=".3"/>'
+      + handsW('#6b4a00', '#fff3b0', '#6b4a00');
   } else if (kind === 'arcoíris') {
-    const links = [3, 7, 11, 33, 37, 41].map((x) => `<path d="M${x} 8.5 V21.5" stroke="#a8683f" stroke-width=".6"/>`).join('') + '<rect x="0" y="12.6" width="11" height="4.8" fill="#f3c2a0" opacity=".65"/><rect x="33" y="12.6" width="11" height="4.8" fill="#f3c2a0" opacity=".65"/>';
-    g = strap('#dc9f78', '#a8683f', links)
-      + '<circle cx="22" cy="15" r="13" fill="#dc9f78" stroke="#a8683f" stroke-width=".6"/>'
-      + ring(24, 11.2, (x, y, i) => `<rect x="${(x - 1.15).toFixed(2)}" y="${(y - 1.15).toFixed(2)}" width="2.3" height="2.3" rx=".4" fill="hsl(${i * 15},95%,55%)" stroke="#ffffff" stroke-width=".25" transform="rotate(${i * 15} ${x.toFixed(2)} ${y.toFixed(2)})"/>`)
-      + '<circle cx="22" cy="15" r="9" fill="#141414" stroke="#a8683f" stroke-width=".5"/>'
-      + '<g fill="#232323" stroke="#dc9f78" stroke-width=".5"><circle cx="17.6" cy="15" r="2.3"/><circle cx="26.4" cy="15" r="2.3"/><circle cx="22" cy="19.4" r="2.3"/></g>'
-      + ring(12, 7.6, (x, y, i) => `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r=".5" fill="hsl(${i * 30},95%,60%)"/>`)
-      + handsOfWatch('#f3c2a0');
+    const sub = (x, y, deg) => { const r = 2.7; const hx = x + (r - 0.7) * Math.cos(deg * Math.PI / 180); const hy = y + (r - 0.7) * Math.sin(deg * Math.PI / 180); return `<circle cx="${x}" cy="${y}" r="${r}" fill="#1b1b1b" stroke="url(#wRose)" stroke-width=".55"/><path d="M${x} ${y} L${f2(hx)} ${f2(hy)}" stroke="#f3c3a3" stroke-width=".4" stroke-linecap="round"/><circle cx="${x}" cy="${y}" r=".4" fill="#f3c3a3"/>`; };
+    g = stubs('url(#wRoseB)', '#8a5233', '<path d="M4 11 V29 M8 11 V29 M32 11 V29 M36 11 V29" stroke="#8a5233" stroke-width=".5"/><rect x="-1" y="15.6" width="13" height="8.8" fill="#ffe3cf" opacity=".5"/><rect x="28" y="15.6" width="13" height="8.8" fill="#ffe3cf" opacity=".5"/>')
+      + crown('url(#wRose)', '#8a5233')
+      + '<rect x="31.4" y="11.6" width="3" height="2.6" rx=".6" fill="url(#wRose)" stroke="#8a5233" stroke-width=".35" transform="rotate(32 32.9 12.9)"/><rect x="31.4" y="25.8" width="3" height="2.6" rx=".6" fill="url(#wRose)" stroke="#8a5233" stroke-width=".35" transform="rotate(-32 32.9 27.1)"/>'
+      + `<circle cx="${CX}" cy="${CY}" r="16.4" fill="url(#wRose)" stroke="#7d4a2e" stroke-width=".5"/>`
+      + around(36, 14.4, (x, y, d, i) => `<rect x="${f2(x - 1.05)}" y="${f2(y - 1.55)}" width="2.1" height="3.1" rx=".35" fill="hsl(${i * 10},95%,54%)" stroke="#ffffff" stroke-width=".22" transform="rotate(${d} ${f2(x)} ${f2(y)})"/><path d="M${f2(x - 0.5)} ${f2(y - 1)} L${f2(x + 0.3)} ${f2(y - 0.2)}" stroke="#ffffff" stroke-width=".25" opacity=".7" transform="rotate(${d} ${f2(x)} ${f2(y)})"/>`)
+      + `<circle cx="${CX}" cy="${CY}" r="12.4" fill="url(#wBlack)" stroke="#7d4a2e" stroke-width=".5"/>`
+      + minuteTrack(11.6, '#f3c3a3')
+      + around(12, 10.2, (x, y, d, i) => `<rect x="${f2(x - 0.5)}" y="${f2(y - 0.9)}" width="1" height="1.8" rx=".25" fill="hsl(${i * 30},95%,58%)" transform="rotate(${d} ${f2(x)} ${f2(y)})"/>`)
+      + sub(14.4, 20, 200) + sub(25.6, 20, -40) + sub(20, 25.6, 100)
+      + handsW('#f3c3a3', '#ffffff', '#ff5a36');
   } else if (kind === 'multicolor') {
     const cols = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00c7be', '#007aff', '#af52de', '#ff2d92'];
-    const seg = [0, 1, 2, 3].map((i) => `<rect x="${i * 2.8}" y="8.5" width="2.8" height="13" fill="${cols[i]}"/><rect x="${32.8 + i * 2.8}" y="8.5" width="2.8" height="13" fill="${cols[i + 4]}"/>`).join('');
-    g = `<rect x="0" y="8.5" width="44" height="13" rx="2" fill="#fff"/>${seg}`
-      + '<path d="M11.5 4 Q22 0.5 32.5 4 Q35.5 15 32.5 26 Q22 29.5 11.5 26 Q8.5 15 11.5 4 Z" fill="#ffffff" stroke="#222" stroke-width=".7"/>'
-      + '<path d="M13.6 6 Q22 3.2 30.4 6 Q32.8 15 30.4 24 Q22 26.8 13.6 24 Q11.2 15 13.6 6 Z" fill="#101820"/>'
-      + ring(12, 7.4, (x, y, i) => `<rect x="${(x - 0.6).toFixed(2)}" y="${(y - 0.6).toFixed(2)}" width="1.2" height="1.2" rx=".3" fill="${cols[i % 8]}"/>`)
-      + [[12.6, 5], [31.4, 5], [12.6, 25], [31.4, 25]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r=".8" fill="#c9ced6" stroke="#555" stroke-width=".3"/>`).join('')
-      + '<path d="M22 15 L22 9.6" stroke="#ffcc00" stroke-width="1.1" stroke-linecap="round"/><path d="M22 15 L26.2 16.8" stroke="#ff3b30" stroke-width="1.1" stroke-linecap="round"/><circle cx="22" cy="15" r="1" fill="#00c7be"/>';
+    const band = [0, 1, 2, 3].map((i) => `<rect x="${-1 + i * 3.25}" y="11" width="3.25" height="18" fill="${cols[i]}"/><rect x="${28 + i * 3.25}" y="11" width="3.25" height="18" fill="${cols[7 - i]}"/>`).join('');
+    const body = 'M8.2 5.4 Q20 1.6 31.8 5.4 Q35.6 20 31.8 34.6 Q20 38.4 8.2 34.6 Q4.4 20 8.2 5.4 Z';
+    const dial = 'M10.6 7.8 Q20 4.8 29.4 7.8 Q32.4 20 29.4 32.2 Q20 35.2 10.6 32.2 Q7.6 20 10.6 7.8 Z';
+    g = `${band}<path d="M-1 11 H12 V29 H-1 Z M28 11 H41 V29 H28 Z" fill="none" stroke="#222" stroke-width=".4"/><rect x="-1" y="11" width="42" height="4" fill="#ffffff" opacity=".18"/>`
+      + crown('#f2f2f2', '#555')
+      + `<path d="${body}" fill="#fbfbfb" stroke="#3a3a3a" stroke-width=".6"/><path d="M9.6 6.6 Q20 3.2 30.4 6.6" stroke="#ffffff" stroke-width="1" fill="none"/><path d="M9.6 33.4 Q20 36.8 30.4 33.4" stroke="#c9c9c9" stroke-width=".8" fill="none"/>`
+      + [[9.6, 7.4], [30.4, 7.4], [9.6, 32.6], [30.4, 32.6], [6.6, 20], [33.4, 20]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r=".95" fill="url(#wSteel)" stroke="#555" stroke-width=".3"/><path d="M${x - 0.6} ${y} H${x + 0.6} M${x} ${y - 0.6} V${y + 0.6}" stroke="#555" stroke-width=".25"/>`).join('')
+      + `<path d="${dial}" fill="url(#wBlack)" stroke="#222" stroke-width=".4"/>`
+      + '<path d="M12 12 L28 28 M28 12 L12 28 M20 8 V32" stroke="#4a4a4a" stroke-width=".6"/><circle cx="20" cy="20" r="5.2" fill="none" stroke="#5a5a5a" stroke-width=".7"/><circle cx="14.6" cy="26" r="2.4" fill="none" stroke="#ffcc00" stroke-width=".6"/><circle cx="25.4" cy="14" r="2.4" fill="none" stroke="#00c7be" stroke-width=".6"/>'
+      + around(12, 9.6, (x, y, d, i) => `<rect x="${f2(x - 0.55)}" y="${f2(y - 1)}" width="1.1" height="2" rx=".3" fill="${cols[i % 8]}" transform="rotate(${d} ${f2(x)} ${f2(y)})"/>`)
+      + handsW('#ffffff', '#ffcc00', '#ff3b30');
   } else if (kind === 'diamantes') {
     let pave = '';
-    for (let x = 1.2; x < 44; x += 2.2) for (let y = 9.8; y < 21.5; y += 2.2) pave += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r=".75" fill="#ffffff" stroke="#9fd8f5" stroke-width=".25"/>`;
-    g = strap('#d8eefb', '#8cc6e6', pave)
-      + '<circle cx="22" cy="15" r="13" fill="#eaf7ff" stroke="#8cc6e6" stroke-width=".6"/>'
-      + ring(28, 11.3, (x, y) => `<path d="M${x.toFixed(2)} ${(y - 1.1).toFixed(2)} l1.1 1.1 l-1.1 1.1 l-1.1 -1.1 Z" fill="#ffffff" stroke="#7cc4ea" stroke-width=".25"/>`)
-      + '<circle cx="22" cy="15" r="9.2" fill="#cfeeff" stroke="#8cc6e6" stroke-width=".5"/>'
-      + ring(18, 6.6, (x, y) => `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r=".8" fill="#ffffff" stroke="#9fd8f5" stroke-width=".25"/>`)
-      + ring(9, 3.4, (x, y) => `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r=".7" fill="#ffffff" stroke="#9fd8f5" stroke-width=".25"/>`)
-      + handsOfWatch('#2b6f96');
+    for (let x = 0.4; x < 12; x += 1.9) for (let y = 12.2; y < 29; y += 1.9) pave += `<path d="M${f2(x)} ${f2(y - 0.75)} l.75 .75 l-.75 .75 l-.75 -.75 Z M${f2(x + 29)} ${f2(y - 0.75)} l.75 .75 l-.75 .75 l-.75 -.75 Z" fill="#ffffff" stroke="#8fcdea" stroke-width=".18"/>`;
+    const gem = (x, y, r) => `<path d="M${f2(x)} ${f2(y - r)} L${f2(x + r)} ${f2(y)} L${f2(x)} ${f2(y + r)} L${f2(x - r)} ${f2(y)} Z" fill="#ffffff" stroke="#7cc4ea" stroke-width=".2"/><path d="M${f2(x - r * 0.5)} ${f2(y)} H${f2(x + r * 0.5)}" stroke="#bfe6fa" stroke-width=".18"/>`;
+    g = stubs('url(#wIce)', '#7cc4ea', pave)
+      + crown('url(#wIce)', '#7cc4ea')
+      + `<circle cx="${CX}" cy="${CY}" r="16.4" fill="url(#wIce)" stroke="#6bb5dc" stroke-width=".5"/>`
+      + around(30, 15, (x, y) => gem(x, y, 1.05)) + around(26, 12.9, (x, y) => gem(x, y, 0.95), 7)
+      + `<circle cx="${CX}" cy="${CY}" r="11.6" fill="#e9f8ff" stroke="#6bb5dc" stroke-width=".45"/>`
+      + around(22, 10.2, (x, y) => gem(x, y, 0.8)) + around(16, 7.9, (x, y) => gem(x, y, 0.75), 11) + around(11, 5.6, (x, y) => gem(x, y, 0.7)) + around(6, 3.2, (x, y) => gem(x, y, 0.65), 15)
+      + around(12, 10.2, (x, y, d, i) => (i % 3 === 0 ? `<rect x="${f2(x - 0.6)}" y="${f2(y - 1.3)}" width="1.2" height="2.6" rx=".2" fill="#1f6fa8" transform="rotate(${d} ${f2(x)} ${f2(y)})"/>` : ''))
+      + handsW('#1f5f8f', '#ffffff', '#1f5f8f');
   } else {
     return '';
   }
-  return `<svg class="watch-svg" viewBox="-1 0 46 30" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">${g}</svg>`;
+  return `<svg class="watch-svg" viewBox="0 0 40 40" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">${DEFS}${g}${glare}</svg>`;
 }
 
 /** Manos del personaje (con o sin cartas en medio). El reloj va en la muñeca izquierda. */

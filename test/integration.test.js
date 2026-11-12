@@ -332,14 +332,12 @@ test('mostrar cartas voluntariamente y chat de la mesa', async (t) => {
   sa.on('table:chat', (m) => chatA.push(m)); sb.on('table:chat', (m) => chatB.push(m));
   await Promise.all([sa.ready, sb.ready]);
   const joinA = await sa.call('table:join', { code });
-  assert.equal(joinA.quickChat.length, 15);
-  assert.ok(joinA.quickChat.includes('¡Faroleada histórica!'));
-  assert.ok(joinA.quickChat.includes('¡Te chingué!'));
+  assert.deepEqual(joinA.quickChat, ['Check de caballero', 'Te recomiendo irte', 'Te chingué', 'Farol histórico', 'Farol', '¿Vas de farol, verdad?', 'Cagón', 'Mete gay']);
   assert.ok(joinA.quickChat.includes('¿Vas de farol, verdad?'));
   await sb.call('table:join', { code });
 
   // chat rápido y libre
-  let ack = await sb.call('table:chat', { quick: 0 });
+  let ack = await sb.call('table:chat', { quick: 5 });
   assert.ok(ack.ok, ack.error);
   ack = await sa.call('table:chat', { text: '  <b>hola</b> mesa  ' });
   assert.ok(ack.ok);

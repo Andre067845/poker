@@ -489,3 +489,6 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .watch-svg { position: absolute; left: 50%; top: -70%; width: 185%; height: auto; transform: translateX(-50%); filter: drop-shadow(0 1px 1px rgba(0,0,0,.55)); pointer-events: none; }
 .avatar-svg { overflow: visible; }
 .av-preview { padding-top: 26px; }
+
+/* reloj: se ve la caja y un poco de correa */
+.watch-svg { top: -95%; width: 150%; }
